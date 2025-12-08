@@ -1,5 +1,4 @@
 import Papa from 'papaparse';
-import * as etro from 'etro';
 const ytbIcon = '/YoutubeIcon.png';
 const instagramIcon = '/InstaIcon.svg';
 const facebookIcon = '/FacebookIcon.png';
