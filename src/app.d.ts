@@ -10,4 +10,21 @@ declare global {
 	}
 }
 
+// Asset module declarations
+declare module '*.png' {
+	const src: string;
+	export default src;
+}
+
+declare module '*.svg' {
+	const src: string;
+	export default src;
+}
+
+// SvelteKit $lib asset aliases
+declare module '$lib/*' {
+	const src: string;
+	export default src;
+}
+
 export {};
