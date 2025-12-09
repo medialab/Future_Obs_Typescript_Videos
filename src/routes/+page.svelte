@@ -1,155 +1,82 @@
 <script lang="ts">
 	import excelIcon from '$lib/assets/icons/excel.svg';
 	import videoIcon from '$lib/assets/icons/video.svg';
-	import trashIcon from '$lib/assets/icons/trash.svg';
-	import correctIcon from '$lib/assets/icons/correct.svg';
-	import incorrectIcon from '$lib/assets/icons/incorrect.svg';
-	import pendingIcon from '$lib/assets/icons/pending.svg';
+	import Header from '$lib/components/header.svelte';
+	
+	import Alert from '$lib/components/alerts.svelte';
+	import eraseIcon from '$lib/assets/icons/erase.svg';
+	import arrowIcon from '$lib/assets/icons/arrow.svg';
+	import Papa from 'papaparse';
+	import InputFile from '$lib/components/inputFile.svelte';
+	import { csvVideoFilenames, uploadedVideoFiles, missingFilenames, emptyCellsInCsv } from '$lib/stores';
+	import { untrack } from 'svelte';
 
-	import { onMount } from 'svelte';
+	import { fly } from "svelte/transition";
+    import { cubicOut } from "svelte/easing";
 
-	let uploadedCsvFile = $state<File | null>(null);
-	let uploadedVideoFiles = $state<File[]>([]);
+	let uploadedCsvFile = $state<File | undefined>(undefined);
+	let csvData = $state<string>('');
 
-	const handleFiles = (files: FileList | null, type: 'csv' | 'video') => {
+	const clearQueue = () => {
+		$uploadedVideoFiles = [];
+	};
+
+	const extractCsvData = async (csv: File): Promise<string[]> => {
+		csvData = await csv.text();
+		console.log('csvData :', csvData);
+		return Papa.parse(csvData, { header: true }).data.map((row: any) => row.ClipName);
+	};
+
+	//Check all video presence in csv
+	$effect(() => {
+		const uploadedFileNames = $uploadedVideoFiles.map(file => file.name);
+		const missing: string[] = [];
+
+		for (const csvFilename of $csvVideoFilenames) {
+			const hasMatch = uploadedFileNames.some(uploadedName => 
+				uploadedName === csvFilename || 
+				uploadedName === `${csvFilename}.mp4` ||
+				uploadedName.startsWith(csvFilename)
+			);
+			
+			if (!hasMatch) {
+				missing.push(csvFilename);
+			}
+		}
+		
+		untrack(() => {
+			$missingFilenames = missing;
+		});
+	});
+
+	$effect(() => {
+		if (!csvData || csvData.length === 0) {
+			return;
+		}
+
+		csvData.split(',').forEach(el => {
+			if (el.trim().length > 0) {
+				$emptyCellsInCsv.push(el.trim());
+			} else {
+				$emptyCellsInCsv.splice($emptyCellsInCsv.indexOf(el.trim()), 1);
+			}
+		});
+	});
+
+
+	const handleFiles = async (files: FileList | null, type: 'csv' | 'video') => {
 		if (!files?.length) return;
 
 		if (type === 'csv') {
 			uploadedCsvFile = files[0];
+			csvVideoFilenames.set(await extractCsvData(uploadedCsvFile));
 		} else {
-			uploadedVideoFiles = Array.from(files);
+			$uploadedVideoFiles = Array.from(files);
 		}
 	};
 </script>
 
-{#snippet uploaded_file(file: File, status: 'pending' | 'correct' | 'incorrect' = 'pending')}
-	<div
-		class="uploaded_file flex r centered minigap"
-		class:correct={status === 'correct'}
-		class:incorrect={status === 'incorrect'}
-	>
-		<div
-			style="display: {status === 'pending'
-				? 'flex'
-				: 'none'}; border: 1px solid #C7C7C7; background-color: #FFF;"
-			class="flex centered absolute_icon_container"
-		>
-			<img
-				src={pendingIcon}
-				alt="pending"
-				class="absolute_icon"
-				style="animation: rotate 2s infinite;"
-			/>
-		</div>
-		<div
-			style="display: {status === 'correct'
-				? 'flex'
-				: 'none'}; border: 1px solid #0b8400; background-color: #BCE2B8;"
-			class="flex centered absolute_icon_container"
-		>
-			<img src={correctIcon} alt="correct" class="absolute_icon" />
-		</div>
-		<div
-			style="display: {status === 'incorrect'
-				? 'flex'
-				: 'none'}; border: 1px solid #dc9600; background-color: #FFEFC1;"
-			class="flex centered absolute_icon_container"
-		>
-			<img src={incorrectIcon} alt="incorrect" class="absolute_icon" />
-		</div>
-
-		<div class="file_inner_white flex r centered">
-			<p
-				class="annotation file_title"
-				class:correct={status === 'correct'}
-				class:incorrect={status === 'incorrect'}
-			>
-				{file?.name || 'Pdf_attached_first_superlongnames.PDF.csv'}
-			</p>
-			<p class="microtitle">{Math.ceil(file?.size / 1024 / 1024) + ' MB' || '100 MB'}</p>
-		</div>
-		<button class="trash_btn flex centered">
-			<img src={trashIcon} alt="trash" />
-		</button>
-	</div>
-
-	<style>
-		.uploaded_file {
-			width: 32%;
-			padding: 5px 10px 5px 5px;
-			border-radius: 15px;
-			border: 1px solid #d6d6d6;
-			background-color: #f2f2f2;
-			position: relative;
-		}
-
-		.uploaded_file.correct {
-			border: 1px solid #0b8400;
-		}
-
-		.correct {
-			color: #0b8400;
-		}
-
-		.incorrect {
-			color: #dc9600;
-		}
-
-		.uploaded_file.incorrect {
-			border: 1px solid #dc9600;
-		}
-
-		.absolute_icon_container {
-			position: absolute;
-			top: 0;
-			right: 0;
-			padding: 5px;
-			border-radius: 50px;
-			transform: translate(30%, -30%);
-			background-color: #f2f2f2;
-		}
-
-		.absolute_icon {
-			width: 9px;
-			height: 9px;
-		}
-
-		.file_inner_white {
-			width: 100%;
-			background-color: #ffffff;
-			border-radius: 10px;
-			padding: 10px;
-			justify-content: space-between;
-		}
-
-		.file_title {
-			line-clamp: 1;
-			display: -webkit-inline-box;
-			-webkit-line-clamp: 1;
-			-webkit-box-orient: vertical;
-			overflow: hidden;
-			text-overflow: ellipsis;
-			white-space: nowrap;
-			max-width: 10ch;
-		}
-
-		.trash_btn {
-			width: 25px;
-			height: 25px;
-			cursor: pointer;
-			pointer-events: all;
-		}
-
-		@keyframes rotate {
-			0% {
-				transform: rotate(0deg);
-			}
-			100% {
-				transform: rotate(360deg);
-			}
-		}
-	</style>
-{/snippet}
+<Header />
 
 {#snippet upload_container(value: string, icon: string, files: boolean, type: 'csv' | 'video')}
 	<div class="upload_greyzone flex v centered">
@@ -188,8 +115,8 @@
 		</div>
 		{#if files}
 			<div class="uploaded_files_container flex r minigap">
-				{#each uploadedVideoFiles as file}
-					{@render uploaded_file(file)}
+				{#each $uploadedVideoFiles as file}
+					<InputFile file={file} />
 				{/each}
 			</div>
 		{/if}
@@ -207,7 +134,7 @@
 		}
 
 		.upload_greyzone:hover {
-			padding: 15px;
+			background-color: rgb(219, 219, 219);
 			transition: all 0.3s ease-in-out;
 		}
 
@@ -254,23 +181,53 @@
 		<div class="flex v">
 			<div class="flex v minigap">
 				<p class="microtitle">Uploaded videos:</p>
-				<p class="annotation">13 videos</p>
+				<p class="annotation">{$uploadedVideoFiles.length} videos</p>
 			</div>
 			<div class="flex v minigap">
 				<p class="microtitle">Total payload:</p>
-				<p class="annotation">450 mb</p>
+				<p class="annotation">{Math.ceil($uploadedVideoFiles.reduce((acc, file) => acc + file.size, 0) / 1024 / 1024)} mb</p>
 			</div>
 			<div class="flex v minigap">
 				<p class="microtitle">CSV Rows:</p>
-				<p class="annotation">15 rows</p>
+				{#if csvData}
+					<p class="annotation">{Papa.parse(csvData).data.length} rows</p>
+				{:else}
+					<p class="annotation">0 rows</p>
+				{/if}
 			</div>
 		</div>
 	</div>
 	<div class="upload_container flex v">
 		{@render upload_container('Max 500 MB', excelIcon, false, 'csv')}
 		{@render upload_container('Max 500 MB', videoIcon, true, 'video')}
+		<div class="flex h spacebetween">
+
+			<button class="flex h minigap centered" onclick={clearQueue}>
+				<img src={eraseIcon} alt="Process all" class="btn_icon">
+				<p class="annotation" style="color: #C7C7C7;">Clear whole queue</p>
+			</button>
+
+			<button class="flex h minigap success centered">
+				<p class="annotation">Process all</p>
+				<img src={arrowIcon} alt="Process all" class="btn_icon">
+			</button>
+		
+		</div>
 	</div>
-	<div class="flex v" id="alert_container"></div>
+	<div class="flex v" id="alert_container" style="overflow: hidden;">
+		<p class="title">Alerts</p>
+		<div class="flex v minigap">
+			{#if $missingFilenames.length > 0}
+			{#each $missingFilenames as filename, index}
+				<div in:fly={{ x: 100, duration: 300, easing: cubicOut, delay: index * 100 }} out:fly={{ x: 100, duration: 300, easing: cubicOut, delay: index * 100 }}>
+					<Alert type="error" message="No file uploaded for {filename}" />
+				</div>
+			{/each}
+			{:else}
+					<p class="annotation">No alerts, everything is good!</p>
+				{/if}
+		</div>
+	</div>
 </section>
 
 <style>
@@ -278,9 +235,10 @@
 		display: grid;
 		grid-template-columns: repeat(11, 1fr);
 		gap: 50px;
-		padding: 50px;
+		padding: 20px;
 		height: 100%;
 		width: 100%;
+		margin-top: 100px;
 	}
 
 	.main_grid :nth-child(1),

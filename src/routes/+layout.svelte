@@ -37,8 +37,8 @@
 	}
 
 	:global(.title) {
-		font-size: 16px;
-		color: #141414;
+		font-size: 22px;
+		color: #0a0a0a;
 	}
 
 	:global(.centered) {
@@ -61,5 +61,53 @@
 
 	:global(.minigap) {
 		gap: 5px;
+	}
+
+	:global(.spacebetween) {
+		justify-content: space-between;
+	}
+
+	:global(.warning) {
+        background-color: #FFF4DD;
+        border: 1px solid #dc9600;
+    }
+    :global(.error) {
+        background-color: #FFF0F0;
+        border: 1px solid #F90000;
+    }
+    :global(.success) {
+        background-color: #E9FFE7;
+        border: 1px solid #0b8400;
+    }
+
+	:global(button) {
+		word-wrap: none;
+		word-break: keep-all;
+		overflow-wrap: normal;
+		text-overflow: ellipsis;
+		display: inline-block;
+		vertical-align: middle;
+		white-space: nowrap;
+		text-align: center;
+		width: fit-content;
+		border: solid 1px #D6D6D6;
+		border-radius: 10px;
+		padding: 5px 10px;
+		cursor: pointer;
+		background-color: #F2F2F2;
+		pointer-events: visible;
+		transition: all 0.3s ease-in-out;
+	}
+
+	:global(button:hover) {
+		transform: scale(1.02);
+		transition: all 0.3s ease-in-out;
+	}
+
+	:global(.btn_icon) {
+		width: 20px;
+		height: 20px;
+		object-fit: contain;
+		object-position: center;
 	}
 </style>

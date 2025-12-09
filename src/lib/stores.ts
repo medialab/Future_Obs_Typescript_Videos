@@ -6,3 +6,7 @@ export type RenderedVideo = {
 };
 
 export let renderedVideos = writable<RenderedVideo[]>([]);
+export let csvVideoFilenames = writable<string[]>([]);
+export let uploadedVideoFiles = writable<File[]>([]);
+export let missingFilenames = writable<string[]>([]);
+export let emptyCellsInCsv = writable<string[]>([]);
