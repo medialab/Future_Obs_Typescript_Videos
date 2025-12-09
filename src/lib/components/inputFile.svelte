@@ -3,19 +3,29 @@
 	import correctIcon from '$lib/assets/icons/correct.svg';
 	import incorrectIcon from '$lib/assets/icons/incorrect.svg';
 	import pendingIcon from '$lib/assets/icons/pending.svg';
-    import { csvVideoFilenames, uploadedVideoFiles } from '$lib/stores';
+    import { clearFile } from '$lib/fileStorage';
+    import { csvVideoFilenames, uploadedVideoFiles, unknownFiles } from '$lib/stores';
+    import { afterNavigate } from '$app/navigation';
+    import { untrack } from 'svelte';
 
-	let props = $props<{ file: File}>();
+	let props = $props<{ file: Blob}>();
 
 	let status = $state<'pending' | 'correct' | 'incorrect'>('pending');
 
     const getFileStatus = async (fileName: string, csvVideoFilenames: string[]) => {
 		if (csvVideoFilenames && csvVideoFilenames.length > 0) {
-            //console.log('csvVideoFilenames :', csvVideoFilenames);
             
             const cleanFilename = fileName.replace('.mp4', '').replace('.mov', '');
-            //console.log('cleanFilename :', cleanFilename);
 			const foundFilename = csvVideoFilenames.find(videoFilename => videoFilename.includes(cleanFilename));
+
+            if (!foundFilename) {
+				untrack(() =>
+					unknownFiles.update((filenames) =>
+						filenames.includes(fileName) ? filenames : [...filenames, fileName]
+					)
+				);
+			}
+
 			return foundFilename ? 'correct' : 'incorrect';
 		} else {
 			return 'pending';
@@ -23,9 +33,21 @@
         
 	};
 
-    const removeFile = (fileName: string) => {
-        uploadedVideoFiles.update(videoFiles => videoFiles.filter(videoFile => videoFile.name !== fileName));
+    const removeFile = async (fileName: string) => {
+        untrack(() => uploadedVideoFiles.update(videoFiles => videoFiles.filter(videoFile => videoFile.name !== fileName)));
+        untrack(() => unknownFiles.update(unknownFiles => unknownFiles.filter(unknownFile => unknownFile !== fileName)));
+        try {
+            await clearFile(fileName);
+        } catch (error) {
+            console.error('Error clearing file:', error);
+        }
     };
+
+	afterNavigate(async () => {
+		getFileStatus(props.file.name, $csvVideoFilenames).then((newStatus) => {
+			status = newStatus;
+		});
+	});
 
 	$effect(() => {
 		getFileStatus(props.file.name, $csvVideoFilenames).then((newStatus) => {
@@ -79,7 +101,7 @@
 			</p>
 			<p class="microtitle">{Math.ceil(props.file?.size / 1024 / 1024) + ' MB' || '100 MB'}</p>
 		</div>
-		<button class="trash_btn flex centered" onclick={() => removeFile(props.file.name)}>
+		<button class="trash_btn flex centered" onclick={async () => await removeFile(props.file.name)}>
 			<img src={trashIcon} alt="trash" />
 		</button>
 	</div>

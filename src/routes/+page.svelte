@@ -8,27 +8,86 @@
 	import arrowIcon from '$lib/assets/icons/arrow.svg';
 	import Papa from 'papaparse';
 	import InputFile from '$lib/components/inputFile.svelte';
-	import { csvVideoFilenames, uploadedVideoFiles, missingFilenames, emptyCellsInCsv } from '$lib/stores';
+	import { csvVideoFilenames, uploadedVideoFiles, missingFilenames, emptyCellsInCsv, uploadedCsvFile, unknownFiles } from '$lib/stores';
 	import { untrack } from 'svelte';
+	import { clearFiles } from '$lib/fileStorage';
+
+	import { afterNavigate } from '$app/navigation';
+	import { onMount } from 'svelte';
 
 	import { fly } from "svelte/transition";
     import { cubicOut } from "svelte/easing";
 
-	let uploadedCsvFile = $state<File | undefined>(undefined);
 	let csvData = $state<string>('');
 
-	const clearQueue = () => {
+	const clearQueue = async () => {
 		$uploadedVideoFiles = [];
+		try {
+			await clearFiles();
+		} catch (error) {
+			console.error('Error clearing files:', error);
+		}
 	};
+
+	$inspect('unknownFiles :', $unknownFiles);
 
 	const extractCsvData = async (csv: File): Promise<string[]> => {
 		csvData = await csv.text();
-		console.log('csvData :', csvData);
+		//console.log('csvData :', csvData);
 		return Papa.parse(csvData, { header: true }).data.map((row: any) => row.ClipName);
 	};
 
-	//Check all video presence in csv
+	const checkCrossFiles = async () => {
+		const uploadedFileNames = $uploadedVideoFiles.map(file => file.name);
+		const missing: string[] = [];
+
+		for (const csvFilename of $csvVideoFilenames) {
+			const hasMatch = uploadedFileNames.some(uploadedName => 
+				uploadedName === csvFilename || 
+				uploadedName === `${csvFilename}.mp4` ||
+				uploadedName.startsWith(csvFilename)
+			);
+			
+			if (!hasMatch) {
+				missing.push(csvFilename);
+			}
+		}
+
+		if (!csvData || csvData.length === 0) {
+			return;
+		}
+
+		csvData.split(',').forEach(el => {
+			if (el.trim().length > 0) {
+				$emptyCellsInCsv.push(el.trim());
+			} else {
+				$emptyCellsInCsv.splice($emptyCellsInCsv.indexOf(el.trim()), 1);
+			}
+		});
+		
+		untrack(() => {
+			$missingFilenames = missing;
+		});
+	};
+
+	afterNavigate(async () => {
+		await checkCrossFiles();
+	});
+
 	$effect(() => {
+		checkCrossFiles();
+	});
+
+	onMount(async () => {
+		if ($uploadedCsvFile) {
+			const names = await extractCsvData($uploadedCsvFile);
+			csvVideoFilenames.set(names.filter(Boolean));
+			await checkCrossFiles();
+		}
+	});
+
+	//Check all video presence in csv
+	/*$effect(() => {
 		const uploadedFileNames = $uploadedVideoFiles.map(file => file.name);
 		const missing: string[] = [];
 
@@ -49,6 +108,7 @@
 		});
 	});
 
+	//Check for empty cells in csv
 	$effect(() => {
 		if (!csvData || csvData.length === 0) {
 			return;
@@ -61,22 +121,21 @@
 				$emptyCellsInCsv.splice($emptyCellsInCsv.indexOf(el.trim()), 1);
 			}
 		});
-	});
-
+	});*/
 
 	const handleFiles = async (files: FileList | null, type: 'csv' | 'video') => {
 		if (!files?.length) return;
 
 		if (type === 'csv') {
-			uploadedCsvFile = files[0];
-			csvVideoFilenames.set(await extractCsvData(uploadedCsvFile));
+			$uploadedCsvFile = files[0];
+			csvVideoFilenames.set(await extractCsvData($uploadedCsvFile));
 		} else {
 			$uploadedVideoFiles = Array.from(files);
 		}
 	};
 </script>
 
-<Header />
+<Header type="home"/>
 
 {#snippet upload_container(value: string, icon: string, files: boolean, type: 'csv' | 'video')}
 	<div class="upload_greyzone flex v centered">
@@ -96,7 +155,7 @@
 				<img src={icon} alt="icon" />
 				<p class="title">
 					{#if type === 'csv'}
-						{uploadedCsvFile?.name || 'Upload your CSV here'}
+						{$uploadedCsvFile?.name || 'Upload your CSV here'}
 					{:else}
 						Drop your Videos here
 					{/if}
@@ -208,7 +267,9 @@
 			</button>
 
 			<button class="flex h minigap success centered">
-				<p class="annotation">Process all</p>
+				<a href="/composer">
+					<p class="annotation">Process all</p>
+				</a>
 				<img src={arrowIcon} alt="Process all" class="btn_icon">
 			</button>
 		
@@ -217,36 +278,24 @@
 	<div class="flex v" id="alert_container" style="overflow: hidden;">
 		<p class="title">Alerts</p>
 		<div class="flex v minigap">
-			{#if $missingFilenames.length > 0}
-			{#each $missingFilenames as filename, index}
-				<div in:fly={{ x: 100, duration: 300, easing: cubicOut, delay: index * 100 }} out:fly={{ x: 100, duration: 300, easing: cubicOut, delay: index * 100 }}>
-					<Alert type="error" message="No file uploaded for {filename}" />
-				</div>
-			{/each}
+			{#if $missingFilenames.length > 0 || $unknownFiles.length > 0}
+				{#each $missingFilenames as filename, index}
+					<div in:fly={{ x: 100, duration: 300, easing: cubicOut, delay: index * 100 }} out:fly={{ x: 100, duration: 300, easing: cubicOut, delay: index * 100 }}>
+						<Alert type="error" message="No file uploaded for {filename}" />
+					</div>
+				{/each}
+				{#each $unknownFiles as unknownFile, index}
+					<div in:fly={{ x: 100, duration: 300, easing: cubicOut, delay: index * 100 }} out:fly={{ x: 100, duration: 300, easing: cubicOut, delay: index * 100 }}>
+						<Alert type="warning" message="No csv row for {unknownFile}" />
+					</div>
+				{/each}
 			{:else}
 					<p class="annotation">No alerts, everything is good!</p>
-				{/if}
+			{/if}
 		</div>
 	</div>
 </section>
 
 <style>
-	.main_grid {
-		display: grid;
-		grid-template-columns: repeat(11, 1fr);
-		gap: 50px;
-		padding: 20px;
-		height: 100%;
-		width: 100%;
-		margin-top: 100px;
-	}
-
-	.main_grid :nth-child(1),
-	.main_grid :nth-child(3) {
-		grid-column: span 2;
-	}
-
-	.main_grid :nth-child(2) {
-		grid-column: span 7;
-	}
+	
 </style>

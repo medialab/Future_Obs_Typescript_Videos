@@ -38,6 +38,7 @@ export const MasterComposition: React.FC<MasterCompositionProps> = ({ segments }
 								data={segment as VideoData}
 								videoSrc={segment.videoSrc as string}
 								duration={segment.duration as number}
+								isRendering={Boolean((segment as any).isRendering)}
 							/>
 						</TransitionSeries.Sequence>
 						{index < segments.length - 1 && (

@@ -7,17 +7,21 @@ export type VideoData = {
 	Location?: string;
 	Comment_authors?: string;
 	Comments?: string;
-	PostAuthor?: string;
+	Post_author?: string;
 	Platform?: 'YOUTUBE' | 'TIKTOK' | 'INSTAGRAM' | 'FACEBOOK' | 'OTHER';
 	duration?: number;
 	videoSrc?: string;
+	videoSrcPath?: string;
+	renderSrc?: string;
+	isRendering?: boolean;
 };
 
 export const SingleVideoComp: React.FC<{
 	data: VideoData;
 	videoSrc: string;
 	duration: number;
-}> = ({ data, videoSrc, duration }) => {
+	isRendering?: boolean;
+}> = ({ data, videoSrc, duration, isRendering }) => {
 	const canvasWidth = 1920;
 	const canvasHeight = 1080;
 	const videoWidth = 1200;
@@ -28,6 +32,26 @@ export const SingleVideoComp: React.FC<{
 
 	if (!data) {
 		return null;
+	}
+
+	// For server-side rendering, use absolute file path from videoSrcPath
+	// For client-side, use HTTP URL
+	let staticVideoSrc: string;
+	const renderMode =
+		typeof process !== 'undefined' && process.env?.REMOTION_RENDERING === 'true'
+			? true
+			: Boolean(isRendering || data.isRendering);
+
+	if (renderMode) {
+		// Renderer path: prefer explicit renderSrc (http/https), fallback to provided videoSrc
+		staticVideoSrc = data.renderSrc || videoSrc;
+	} else {
+		// Client-side preview: use blob/http/relative paths
+		staticVideoSrc = videoSrc.startsWith('blob:') || videoSrc.startsWith('http')
+			? videoSrc
+			: videoSrc.startsWith('/')
+				? videoSrc
+				: `/${videoSrc}`;
 	}
 
 	const commentsArray = (data.Comments || '')
@@ -59,7 +83,7 @@ export const SingleVideoComp: React.FC<{
 				}}
 			>
 				<OffthreadVideo
-					src={staticFile(videoSrc.replace(/^\//, ''))}
+					src={staticVideoSrc}
 					style={{ width: '100%', height: '100%', objectFit: 'cover' }}
 					muted={false}
 				/>
@@ -112,9 +136,13 @@ export const SingleVideoComp: React.FC<{
 						textAlign: 'center' as const,
 						lineHeight: 1.2,
 						zIndex: 3,
-						width: '100%',
+						width: '90%',
 						maxWidth: '80ch',
-						whiteSpace: 'wrap'
+						whiteSpace: 'wrap',
+						display: '-webkit-box',
+						lineClamp: 2,
+						overflow: 'hidden',
+						textOverflow: 'ellipsis'
 					}}
 				>
 					{data.Title}
@@ -134,7 +162,7 @@ export const SingleVideoComp: React.FC<{
 						zIndex: 3
 					}}
 				>
-					{data.PostAuthor}
+					{data.Post_author}
 				</div>
 			</Sequence>
 

@@ -59,12 +59,21 @@
 		flex-direction: row;
 	}
 
+	:global(.mediumgap) {
+		gap: 10px;
+	}
+
 	:global(.minigap) {
 		gap: 5px;
 	}
 
 	:global(.spacebetween) {
 		justify-content: space-between;
+	}
+
+	:global(.pending) {
+		background-color: #F2F2F2;
+		border: 1px solid #D6D6D6;
 	}
 
 	:global(.warning) {
@@ -79,6 +88,12 @@
         background-color: #E9FFE7;
         border: 1px solid #0b8400;
     }
+
+	:global(a) {
+		text-decoration: none;
+		color: unset;
+		cursor: pointer;
+	}
 
 	:global(button) {
 		word-wrap: none;
@@ -109,5 +124,24 @@
 		height: 20px;
 		object-fit: contain;
 		object-position: center;
+	}
+
+	:global(.main_grid) {
+		display: grid;
+		grid-template-columns: repeat(11, 1fr);
+		gap: 50px;
+		padding: 20px;
+		height: 100%;
+		width: 100%;
+		margin-top: 100px;
+	}
+
+	:global(.main_grid :nth-child(1)),
+	:global(.main_grid :nth-child(3)) {
+		grid-column: span 2;
+	}
+
+	:global(.main_grid :nth-child(2)) {
+		grid-column: span 7;
 	}
 </style>

@@ -9,23 +9,41 @@ type VideoData = {
 	location: string;
 	Comment_authors: string;
 	comments: string;
-	postAuthor: string;
+	Post_author: string;
 	platform: 'YOUTUBE' | 'TIKTOK' | 'INSTAGRAM' | 'FACEBOOK' | 'OTHER';
 };
 
 
 
-export const csvToJson = (csv: string) => {
-	const j = Papa.parse(csv, {
+export const csvToJson = async (csv: File, uploadedFiles?: File[]) => {
+	const j = Papa.parse(await csv.text(), {
 		header: true,
 		skipEmptyLines: true,
 		transformHeader: (header) => header.trim(),
 		transform: (value) => value.trim()
 	});
 
-	// Generate video paths from ClipName in CSV
-	// Videos are now in static/videos/, so paths are /videos/ClipName.mp4
 	if (j.data && Array.isArray(j.data)) {
+		if (uploadedFiles && uploadedFiles.length > 0) {
+			j.data = j.data.map((row: any) => {
+				const clipName = row.ClipName?.trim();
+				
+				if (clipName) {
+					//console.log('clipName :', clipName);
+					//console.log('filenames:', uploadedFiles);
+					const matchingFile = uploadedFiles.find(f => f.name.replace('.mp4', '').replace('.mov', '') === clipName);
+					
+					if (matchingFile) {
+						// Create blob URL from the matching file and set it as videoSrc
+						row.videoSrc = URL.createObjectURL(matchingFile);
+					}
+				}
+				
+				return row;
+			});
+		}
+
+		// Keep videoPaths for backward compatibility
 		(j as any).videoPaths = j.data
 			.map((row: any) => {
 				if (row.ClipName) {
@@ -153,7 +171,7 @@ export async function createVideo(
 	);
 
 	const authorText: etro.layer.Text[] = addTextFrame(
-		videoData.postAuthor,
+		videoData.Post_author,
 		[35, canvasHeight / 2 + videoHeight / 2 - 10],
 		12,
 		etro.parseColor('black'),

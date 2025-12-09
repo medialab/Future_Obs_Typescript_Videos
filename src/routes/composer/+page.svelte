@@ -1,28 +1,77 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import pendingIcon from '$lib/assets/icons/renderable.svg';
+	import renderingIcon from '$lib/assets/icons/inrender.svg';
+	import successIcon from '$lib/assets/icons/success.svg';
+	import errorIcon from '$lib/assets/icons/error.svg';
+
+	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
-	import bgImg from '$lib/assets/BACKGROUND.png';
-	import { renderedVideos } from '$lib/stores';
+	import { renderedVideo } from '$lib/stores';
 	import type { RenderedVideo } from '$lib/stores';
+	import { uploadedVideoFiles, uploadedCsvFile } from '$lib/stores';
+	import Header from '$lib/components/header.svelte';
 
 	import RemotionPlayer from '$lib/remotion/RemotionPlayer.svelte';
 
-	import testCsv from '$lib/assets/test.csv?raw';
-	import type { VideoData } from '$lib/remotion/Videocomp';
+	import type { VideoData } from '$lib/remotion/SingleVideoComp';
 
 	import { csvToJson, triggerBlobDownload } from '$lib/utils';
+
+	let chipStatus = $state<'pending' | 'rendering' | 'success' | 'error'>('pending');
+
+	type RenderVideoData = VideoData & {
+		videoSrcPath?: string;
+		renderSrc?: string;
+		isRendering?: boolean;
+	};
 
 	let videos = $state<any[]>([]);
 	let isRendering = $state(false);
 	let renderProgress = $state(0);
 	let currentScene = $state(0);
 	let renderStatus = $state('Ready to render');
+	let totalDuration = $derived(videos.map(v => v.duration || 0));
 
 	$inspect('renderStatus :', renderStatus);
 
-	async function generateVideo(videos: VideoData[]) {
+	async function uploadVideosForRendering(videos: VideoData[]): Promise<RenderVideoData[]> {
+		const formData = new FormData();
+
+		formData.append('videos', JSON.stringify(videos));
+		
+		// Collect all matching files
+		for (const video of videos) {
+			const clipName = (video as any).ClipName?.trim();
+			if (clipName) {
+				const matchingFile = $uploadedVideoFiles.find(f => 
+					f.name.replace(/\.(mp4|mov|avi|mkv)$/i, '') === clipName
+				);
+				if (matchingFile) {
+					formData.append('files', matchingFile);
+				} else {
+					console.warn(`No matching file found for ClipName: ${clipName}`);
+				}
+			}
+		}
+		
+		const response = await fetch('/composer/api/upload', {
+			method: 'POST',
+			body: formData
+		});
+		
+		if (!response.ok) {
+			const errorText = await response.text();
+			throw new Error(`Failed to upload videos: ${response.statusText} - ${errorText}`);
+		}
+		
+		const { videos: updatedVideos } = await response.json();
+		console.log('Uploaded videos:', videos);
+		return updatedVideos as RenderVideoData[];
+	}
+
+	async function generateVideo(videos: RenderVideoData[]) {
 		return new Promise<Blob>((resolve, reject) => {
-			fetch('/videos', {
+			fetch('/composer/api/videos', { 
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json'
@@ -101,12 +150,22 @@
 		});
 	}
 
-	onMount(async () => {
+	$effect(() => {
 		if (!browser) return;
+		
+		if (!$uploadedCsvFile || !$uploadedVideoFiles || $uploadedVideoFiles.length === 0) {
+			return;
+		}
 
-		const json = csvToJson(testCsv);
-		videos = await addDurationToVideos(json.data);
-		console.log('videos with duration', videos);
+		(async () => {
+			try {
+				const json = await csvToJson($uploadedCsvFile, $uploadedVideoFiles);
+				videos = await addDurationToVideos(json.data);
+				console.log('videos with duration', videos);
+			} catch (error) {
+				console.error('Error loading videos:', error);
+			}
+		})();
 	});
 
 	function parseTimeToSeconds(timeString: string): number {
@@ -125,10 +184,8 @@
 	async function addDurationToVideos(videos: any[]): Promise<VideoData[]> {
 		return Promise.all(
 			videos.map(async (video) => {
-				// Generate videoSrc from ClipName before getting duration
-				const videoSrc = `/videos/${video.ClipName}.mp4`;
+				const videoSrc = video.videoSrc;
 				const duration = parseTimeToSeconds(video.EndTime) - parseTimeToSeconds(video.BeginTime);
-				console.log('duration', duration);
 				return {
 					...video,
 					videoSrc,
@@ -140,92 +197,312 @@
 
 	async function renderAllVideos() {
 		isRendering = true;
-		renderedVideos.set([]);
-		renderStatus = 'Starting...';
-
+		renderedVideo.set([{filename: '', blob: undefined}]);
+		renderStatus = 'Uploading videos...';
+		chipStatus = 'rendering';
 		try {
+			// Step 1: Upload videos to server and get back videos with server paths
+			renderStatus = 'Uploading videos to server...';
+			const videosWithServerPaths = await uploadVideosForRendering(videos);
+			console.log('Videos uploaded, server paths:', videosWithServerPaths);
+			
+			// Step 1.5: Prepare render-specific props (absolute http URL + rendering flag)
+			const assetOrigin =
+				typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
+
+			const renderReadyVideos = videosWithServerPaths.map((video) => {
+				const normalized = video.videoSrc?.startsWith('/')
+					? `${assetOrigin}${video.videoSrc}`
+					: video.videoSrc
+						? `${assetOrigin}/${video.videoSrc}`
+						: video.renderSrc;
+
+				return {
+					...video,
+					renderSrc: video.renderSrc || normalized,
+					isRendering: true
+				};
+			});
+
+			// Step 2: Generate video using the videos with server paths
+			renderStatus = 'Starting render...';
 			const filename = `${videos.map((video) => video.ClipName).join(',')}.mp4`;
-			const blob = await generateVideo(videos);
-			renderedVideos.update((videos) => [...videos, { filename, blob }]);
+			const blob = await generateVideo(renderReadyVideos);
+			
+			renderedVideo.set([{ filename, blob }]);
 			renderStatus = `Completed ${currentScene}/${videos.length}`;
+			chipStatus = 'success';
+			isRendering = false;
+
 		} catch (error) {
 			console.error(`Error rendering videos:`, error);
-			renderStatus = `Error rendering videos`;
+			renderStatus = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+			isRendering = false;
+			chipStatus = 'error';
 		}
 	}
 
 	async function downloadRenderedVideo(video: RenderedVideo) {
+		if (!video.blob) {
+			console.error('ERROR: Blob is empty!');
+			return;
+		}
+		if (!video.filename) {
+			console.error('ERROR: Filename is empty!');
+			return;
+		}
 		await triggerBlobDownload(video.blob, video.filename);
 	}
+
+	onDestroy(() => {
+		videos.forEach((video: any) => {
+			if (video.videoSrc?.startsWith('blob:')) {
+				URL.revokeObjectURL(video.videoSrc);
+			}
+		});
+	});
 </script>
 
-{#key videos}
-	<RemotionPlayer segments={videos} controls={true} loop={false} autoPlay={false} />
-{/key}
+<Header type="composer" />
 
-<div class="controls">
-	<button
-		id="render-all-button"
-		onclick={renderAllVideos}
-		disabled={isRendering || videos.length === 0}
-	>
-		{isRendering ? 'Rendering (Server)...' : 'Render All (Server)'}
-	</button>
+{#snippet timelineElement(filename: string = 'EOLIEN_YTB_22.MP4', videoSrc: string = 'https://picsum.photos/200/300')}
+<div class="container flex v minigap centered">
+	<div class="video_thumb">
+		<img src={videoSrc} alt="" class="video_thumb">
+	</div>
+	<p class="microtitle centered">
+		{filename}
+	</p>
+</div>
 
-	<progress id="render-progress" value={renderProgress} max="100">{renderProgress}%</progress>
+<style>
+	.container {
+		width: 100%;
+		max-width: 105px;
+		height: fit-content;
+		background-color: #F2F2F2;
+		border-radius: 10px;
+		border: 1px solid #D6D6D6;
+		padding: 6px;
+		overflow: hidden;
+	}
 
-	<p>Videos loaded: {videos.length}</p>
+	.video_thumb {
+		width: 100%;
+		height: 50px;
+		object-fit: cover;
+		object-position: center;
+		border-radius: 7px;
+		border: 1px solid #D6D6D6;
+	}
+</style>
+{/snippet}
 
-	{#if renderStatus}
-		<p class="status">{renderStatus}</p>
-	{/if}
+{#snippet timelinePill(video?: VideoData)}
+<div class="container flex v minigap centered" style="width: {video?.duration}px;"></div>
 
-	{#if $renderedVideos.length}
-		<div class="rendered-list" id="rendered-list">
-			<h3>Rendered videos</h3>
-			{#each $renderedVideos as video, i}
-				<div class="rendered-item">
-					<span>{video.filename}</span>
-					<button id={`video-download-button-${i}`} onclick={() => downloadRenderedVideo(video)}>
-						Download
-					</button>
+<style>
+	.container {
+		height: 100%;
+		width: 100%;
+		border-radius: 50px;
+		border: 1px solid #6B74C4;
+		background-color: #C6CCFF;
+	}
+</style>
+{/snippet}
+
+<section class="main_grid">
+	<div class="flex v" id="videofiles_infos">
+		<div class="flex v mediumgap">
+			<p class="title">Video options</p>
+			<div class="flex v mediumgap">
+				<div class="flex v minigap">
+					<p class="microtitle">Render quality:</p>
+					<p class="annotation">HD</p>
 				</div>
+				<div class="flex v minigap">
+					<p class="microtitle">Framerate:</p>
+					<p class="annotation">24fps</p>
+				</div>
+				<div class="flex v minigap">
+					<p class="microtitle">Audio normalization:</p>
+					<p class="annotation">Yes</p>
+				</div>
+			</div>
+		</div>
+		<div class="flex v mediumgap">
+			<p class="title">File inspections</p>
+			<div class="flex v mediumgap">
+				<div class="flex v minigap">
+					<p class="microtitle">Codec:</p>
+					<p class="annotation">Mpeg4</p>
+				</div>
+				<div class="flex v minigap">
+					<p class="microtitle">Canvas:</p>
+					<p class="annotation">1920x1080</p>
+				</div>
+				<div class="flex v minigap">
+					<p class="microtitle">Weight:</p>
+					<p class="annotation">322mb</p>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="player_console flex v" id="remotion_player_container">
+		<div class="flex h spacebetween" style="padding: 0 5px;">
+			<p class="annotation">
+				EOLIEN_YTB_22.MP4
+			</p>
+		</div>
+		{#key videos && $uploadedVideoFiles && $uploadedCsvFile}
+			<RemotionPlayer segments={videos} controls={true} loop={false} autoPlay={false} inframe={renderProgress * 10}/>
+		{/key}
+		<div class="timeline flex h minigap">
+			{#each videos as v}
+				{@render timelinePill(v)}
 			{/each}
 		</div>
-	{/if}
+	</div>
+	<div class="flex v mediumgap" id="alert_container" style="overflow: hidden;">
+		<p class="title">Render status</p>
+		<div class="flex v minigap">
+			{@render renderChip(chipStatus)}
+		</div>
+	</div>
+</section>
+
+{#snippet renderChip(state: 'pending' | 'rendering' | 'success' | 'error' = 'pending', filename: string = 'Video_1.mp4', size: number = 332)}
+<div class="chip_father flex v minigap centered">
+	<div class="absolute_dot" class:pending={state === 'pending'}
+	class:warning={state === 'rendering'}
+	class:success={state === 'success'}
+	class:error={state === 'error'}></div>
+	<div class="chip flex h centered mediumgap">
+		<button class="chip_img flex centered"
+			onclick={state === 'pending' ? () => {renderAllVideos()} : state === 'success' ? () => {downloadRenderedVideo($renderedVideo[0])} : () => {}}
+			class:pending={state === 'pending'}
+			class:warning={state === 'rendering'}
+			class:success={state === 'success'}
+			class:error={state === 'error'}
+			>
+			<img src={state === 'pending' ? pendingIcon : state === 'rendering' ? renderingIcon : state === 'success' ? successIcon : errorIcon} alt={state}/>
+	</button>
+			<div class="flex v minigap">
+				<p class="annotation">{filename}</p>
+				<p class="microtitle">{size} MB</p>
+			</div>
+	</div>
+	<progress id="render-progress" class="render_progress" class:success={state === 'success'} value={renderProgress} max="100"></progress>
 </div>
+	<style>
+		.chip {
+			width: fit-content;
+			height: fit-content;
+			border: 1px solid #D6D6D6;
+			background-color: #FFF;
+			padding: 5px 15px 5px 5px;
+			border-radius: 15px;
+			position: relative;
+			overflow: visible;
+		}
+
+		.chip_father {
+			width: fit-content;
+			height: fit-content;
+			position: relative;
+		}
+
+		.absolute_dot {
+			top: 0;
+			right: 0;
+			width: 15px;
+			height: 15px;
+			border-radius: 100%;
+			position: absolute;
+			transform: translate(30%, -30%);
+			z-index: 10;
+		}
+
+		.render_progress {
+			width: 95%;
+			height: 10px;
+			border-radius: 50px;
+			background-color: #F2F2;
+			border: 1px solid #D6D6D6;
+			overflow: hidden;
+		}
+
+		.render_progress.success::-webkit-progress-value {
+			background-color: #0b8400;
+		}
+
+		.render_progress::-webkit-progress-bar {
+			background-color: #F2F2F2;
+			border-radius: 50px;
+		}
+
+		.render_progress::-webkit-progress-value {
+			background-color: #dc9600;
+			border-radius: 50px;
+			transition: width 0.3s ease;
+		}
+
+		.render_progress::-moz-progress-bar {
+			background-color: #dc9600;
+			border-radius: 50px;
+		}
+
+		.chip_img {
+			width: 44px;
+			height: 44px;
+			border-radius: 10px ;
+		}
+
+		.chip_img > img {
+			width: 70%;
+			height: 70%;
+			object-fit: cover;
+			object-position: center;
+			overflow: visible;
+		}
+		
+		.chip_img.warning > img {
+			animation: rotate 2s infinite;
+		}
+
+		@keyframes rotate {
+			from {
+				transform: rotate(0deg);
+			}
+			to {
+				transform: rotate(360deg);
+			}
+		}
+	</style>
+{/snippet}
 
 <style>
 	:global(body) {
 		background-color: white;
 	}
-
-	.controls {
-		position: fixed;
-		top: 20px;
-		left: 20px;
-		display: flex;
-		flex-direction: row;
-		gap: 10px;
-		z-index: 100;
+	
+	.player_console {
+		width: 100%;
+		height: fit-content;
+		background-color: #F2F2F2;
+		border-radius: 30px;
+		border: 1px solid #D6D6D6;
+		padding: 20px 15px;
 	}
 
-	.rendered-list {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		z-index: 10;
-	}
-
-	.rendered-item {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		font-size: 0.9rem;
-	}
-
-	button:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
+	.timeline {
+		width: 100%;
+		height: 30px;
+		border-radius: 17px;
+		background-color: #FFFFFF;
+		border: 1px solid #D6D6D6;
+		padding: 5px;
+		overflow: hidden;
 	}
 </style>

@@ -1,10 +1,18 @@
-<script>
+<script lang="ts">
+let props = $props();
 
+import { resolve } from "$app/paths";
 </script>
 
 <header class="header flex h spacebetween">
-    <p class="annotation">Etnographic video composer V0.1</p>
-    <p class="annotation">Composer →</p>
+    {#if props.type === 'home'}
+        <p class="annotation">Etnographic video composer V0.1</p>
+        <a href={resolve('/composer')}><p class="annotation">Composer →</p></a>
+    {:else if props.type === 'composer'}
+        <a href={resolve('/')}><p class="annotation">← Uploads panel</p></a>
+        <p class="annotation">Etnographic video composer V0.1</p>
+    {/if}
+    
 </header>
 
 <style>
