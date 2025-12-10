@@ -135,6 +135,7 @@ export const SingleVideoComp: React.FC<{
 						fontSize: 50,
 						color: 'black',
 						textAlign: 'center' as const,
+						alignSelf: 'center',
 						lineHeight: 1.2,
 						zIndex: 3,
 						width: '90%',

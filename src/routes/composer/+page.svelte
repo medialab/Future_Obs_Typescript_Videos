@@ -296,16 +296,23 @@ style="width: {video?.duration ? (video.duration / totalDuration * 100) + '%' : 
 onclick={() => {
 	$currentFrame = startFrame + 1; //The one is perceptual for the first segment
 }}>
-<p class="microtitle">{(video as any)?.ClipName || 'Video_1.mp4'}</p></button>
+<p class="microtitle pilltext">{(video as any)?.ClipName || 'Video_1.mp4'}</p></button>
 
 <style>
 	.container {
-		height: 100%;
+		height: fit-content;
 		width: 100%;
 		border-radius: 50px;
 		border: 1px solid #6B74C4;
 		background-color: #C6CCFF;
 		transition: background-color 0.2s ease;
+	}
+
+	.pilltext {
+		overflow-x: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		width: 100%;
 	}
 </style>
 {/snippet}
@@ -370,7 +377,7 @@ onclick={() => {
 	</div>
 </section>
 
-{#snippet renderChip(state: 'pending' | 'rendering' | 'success' | 'error' = 'pending', filename: string, size: number = 332)}
+{#snippet renderChip(state: 'pending' | 'rendering' | 'success' | 'error' = 'pending', filename: string, size: number)}
 
 <div class="chip_father flex v minigap centered">
 	{#if state !== 'pending'}
@@ -390,11 +397,13 @@ onclick={() => {
 			<img src={state === 'pending' ? pendingIcon : state === 'rendering' ? renderingIcon : state === 'success' ? successIcon : errorIcon} alt={state}/>
 		</button>
 
+		<div class="flex v minigap">
+			<p class="annotation">{filename || 'Your render video name'}</p>
+			<p class="microtitle">{size + ' MB' || '0 MB For now'}</p>
+		</div>
+
 			{#if state === 'success'}
-				<div class="flex v minigap">
-					<p class="annotation">{filename}</p>
-					<p class="microtitle">{size} MB</p>
-				</div>
+				
 				<button class="trash_btn flex centered" onclick={async () => await clearFile(filename).then(() => {chipStatus = 'pending'; renderProgress = 0})}>
 					<img src={trashIcon} alt="trash" />
 				</button>
@@ -505,7 +514,7 @@ onclick={() => {
 
 	.timeline {
 		width: 100%;
-		height: 30px;
+		height: fit-content;
 		border-radius: 17px;
 		background-color: #FFFFFF;
 		border: 1px solid #D6D6D6;
