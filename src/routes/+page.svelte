@@ -22,6 +22,7 @@
 
 	const clearQueue = async () => {
 		$uploadedVideoFiles = [];
+		$unknownFiles = [];
 		try {
 			await clearFiles();
 		} catch (error) {
@@ -29,7 +30,7 @@
 		}
 	};
 
-	$inspect('unknownFiles :', $unknownFiles);
+	//$inspect('unknownFiles :', $unknownFiles);
 
 	const extractCsvData = async (csv: File): Promise<string[]> => {
 		csvData = await csv.text();
@@ -76,6 +77,17 @@
 
 	$effect(() => {
 		checkCrossFiles();
+	});
+
+	// Rehydrate CSV-derived data when IndexedDB-loaded file arrives after mount
+	$effect(() => {
+		const csvFile = $uploadedCsvFile;
+		if (!csvFile) return;
+		(async () => {
+			const names = await extractCsvData(csvFile);
+			csvVideoFilenames.set(names.filter(Boolean));
+			await checkCrossFiles();
+		})();
 	});
 
 	onMount(async () => {
@@ -130,14 +142,22 @@
 			$uploadedCsvFile = files[0];
 			csvVideoFilenames.set(await extractCsvData($uploadedCsvFile));
 		} else {
-			$uploadedVideoFiles = Array.from(files);
+			const incoming = Array.from(files);
+			const merged = [...$uploadedVideoFiles, ...incoming];
+			// keep unique by name to avoid duplicates from re-selecting same file
+			const seen = new Set<string>();
+			$uploadedVideoFiles = merged.filter((file) => {
+				if (seen.has(file.name)) return false;
+				seen.add(file.name);
+				return true;
+			});
 		}
 	};
 </script>
 
 <Header type="home"/>
 
-{#snippet upload_container(value: string, icon: string, files: boolean, type: 'csv' | 'video')}
+{#snippet upload_container(icon: string, files: boolean, type: 'csv' | 'video')}
 	<div class="upload_greyzone flex v centered">
 		<div
 			class="upload_whitezone flex v centered"
@@ -154,13 +174,19 @@
 			<label for="upload_input" class="flex v centered minigap upload_label">
 				<img src={icon} alt="icon" />
 				<p class="title">
-					{#if type === 'csv'}
+					{#if type === 'csv' && $uploadedCsvFile}
 						{$uploadedCsvFile?.name || 'Upload your CSV here'}
 					{:else}
 						Drop your Videos here
 					{/if}
 				</p>
-				<p class="annotation">{value}</p>
+				{#if type === 'csv' && $uploadedCsvFile}
+						{Math.ceil($uploadedCsvFile?.size / 1024) + ' KB' || 'Max 500 MB'}
+					{:else if type === 'video' && $uploadedVideoFiles.length > 0}
+						{$uploadedVideoFiles.length} videos uploaded
+					{:else}
+						In batch, or single files
+				{/if}
 			</label>
 			<input
 				type="file"
@@ -257,8 +283,8 @@
 		</div>
 	</div>
 	<div class="upload_container flex v">
-		{@render upload_container('Max 500 MB', excelIcon, false, 'csv')}
-		{@render upload_container('Max 500 MB', videoIcon, true, 'video')}
+		{@render upload_container(excelIcon, false, 'csv')}
+		{@render upload_container(videoIcon, true, 'video')}
 		<div class="flex h spacebetween">
 
 			<button class="flex h minigap centered" onclick={clearQueue}>
@@ -266,8 +292,8 @@
 				<p class="annotation" style="color: #C7C7C7;">Clear whole queue</p>
 			</button>
 
-			<button class="flex h minigap success centered">
-				<a href="/composer">
+			<button class="flex h minigap success centered" class:disabled={$missingFilenames.length !== 0 || $uploadedCsvFile === null}>
+				<a href="/composer" >
 					<p class="annotation">Process all</p>
 				</a>
 				<img src={arrowIcon} alt="Process all" class="btn_icon">
@@ -297,5 +323,7 @@
 </section>
 
 <style>
+
+	
 	
 </style>

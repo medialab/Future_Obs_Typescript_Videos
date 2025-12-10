@@ -14,6 +14,7 @@ export let missingFilenames = writable<string[]>([]);
 export let emptyCellsInCsv = writable<string[]>([]);
 export let uploadedCsvFile = writable<File | undefined>(undefined);
 export let unknownFiles = writable<string[]>([]);
+export let currentFrame = writable<number>(0);
 
 // Sync stores with IndexedDB on browser
 if (browser) {

@@ -10,6 +10,7 @@ export type VideoData = {
 	Post_author?: string;
 	Platform?: 'YOUTUBE' | 'TIKTOK' | 'INSTAGRAM' | 'FACEBOOK' | 'OTHER';
 	duration?: number;
+	ClipName?: string;
 	videoSrc?: string;
 	videoSrcPath?: string;
 	renderSrc?: string;
@@ -54,12 +55,12 @@ export const SingleVideoComp: React.FC<{
 				: `/${videoSrc}`;
 	}
 
-	const commentsArray = (data.Comments || '')
+	const commentsArray = (data.Comments || '§ Comment manquant')
 		.split('§')
 		.map((c) => c.trim())
 		.filter(Boolean);
 
-	const Comment_authorsArray = (data.Comment_authors || '')
+	const Comment_authorsArray = (data.Comment_authors || '§ Author manquant')
 		.split('§')
 		.map((c) => c.trim())
 		.filter(Boolean);
@@ -201,7 +202,7 @@ export const SingleVideoComp: React.FC<{
 							zIndex: 3
 						}}
 					>
-						{author}
+						@{author}
 					</div>
 				</Sequence>
 			))}

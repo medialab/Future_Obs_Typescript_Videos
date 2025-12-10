@@ -85,8 +85,8 @@
         border: 1px solid #F90000;
     }
     :global(.success) {
-        background-color: #E9FFE7;
-        border: 1px solid #0b8400;
+        background-color: #E9FFE7 !important;
+        border: 1px solid #0b8400 !important;
     }
 
 	:global(a) {
@@ -143,5 +143,25 @@
 
 	:global(.main_grid :nth-child(2)) {
 		grid-column: span 7;
+	}
+
+	:global(.disabled) {
+		opacity: 0.2;
+		cursor: not-allowed;
+		pointer-events: none;
+	}
+
+	:global(.trash_btn) {
+			width: 25px;
+			height: 25px;
+			cursor: pointer;
+			pointer-events: all;
+            border: none;
+			background-color: transparent;
+		}
+
+	:global(.trash_btn:hover > img) {
+		transform: scale(1.1) rotate(2deg);
+		transition: transform 0.3s ease-in-out;
 	}
 </style>

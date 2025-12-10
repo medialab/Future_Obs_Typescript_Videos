@@ -71,7 +71,7 @@
 				src={pendingIcon}
 				alt="pending"
 				class="absolute_icon"
-				style="animation: rotate 2s infinite;"
+				style="animation: spinning 2s linear infinite;"
 			/>
 		</div>
 		<div
@@ -114,6 +114,7 @@
 			border: 1px solid #d6d6d6;
 			background-color: #f2f2f2;
 			position: relative;
+			transition: transform 0.3s ease-in-out;
 		}
 
 		.uploaded_file.correct {
@@ -130,6 +131,11 @@
 
 		.uploaded_file.incorrect {
 			border: 1px solid #dc9600;
+		}
+
+		.uploaded_file:hover {
+			transform: scale(1.02);
+			transition: transform 0.3s ease-in-out;
 		}
 
 		.absolute_icon_container {
@@ -166,20 +172,9 @@
 			max-width: 20ch;
 		}
 
-		.trash_btn {
-			width: 25px;
-			height: 25px;
-			cursor: pointer;
-			pointer-events: all;
-            border: none;
-		}
+		
 
-        .trash_btn:hover > img {
-            transform: scale(1.1) rotate(2deg);
-            transition: transform 0.3s ease-in-out;
-        }
-
-		@keyframes rotate {
+		@keyframes spinning {
 			0% {
 				transform: rotate(0deg);
 			}

@@ -5,17 +5,18 @@ import { Player, type PlayerRef } from '@remotion/player';
 	import { MasterComposition as MasterCompositionComponent } from '$lib/remotion/MasterComp';
 	import type { VideoData } from '$lib/remotion/SingleVideoComp';
 import React from 'react';
+import { currentFrame } from '$lib/stores';
 
 	let container: HTMLDivElement | null = $state(null);
 	let root: Root | null = null;
-const playerRef = React.createRef<PlayerRef>();
+	const playerRef = React.createRef<PlayerRef>();
+	
 
 	let props = $props<{
 		segments: VideoData[];
 		controls: boolean;
 		loop: boolean;
 		autoPlay: boolean;
-		inframe?: number;
 	}>();
 
 	const calculateTotalDurationInFrames = (segments: VideoData[]): number => {
@@ -30,8 +31,14 @@ const playerRef = React.createRef<PlayerRef>();
 	const totalDurationInFrames = $derived(calculateTotalDurationInFrames(props.segments));
 
 	$effect(() => {
+		if ($currentFrame && playerRef.current && container) {
+			(playerRef.current as PlayerRef).pause();
+			(playerRef.current as PlayerRef).seekTo($currentFrame);
+		}
+	});
+
+	$effect(() => {
 		if (container && isReady && totalDurationInFrames > 0) {
-			// Clean up previous root if it exists
 			if (root) {
 				root.unmount();
 			}
@@ -39,16 +46,16 @@ const playerRef = React.createRef<PlayerRef>();
 			root = createRoot(container);
 			root.render(
 				React.createElement(Player, {
-					ref: playerRef,
+					ref: playerRef as React.RefObject<PlayerRef>,
 					component: MasterCompositionComponent as any,
 					durationInFrames: totalDurationInFrames as number,
 					compositionWidth: 1920,
-					compositionHeight: 1080,
+					compositionHeight: 1080,	
 					fps: 30,
 					controls: props.controls,
+					clickToPlay: false,
 					loop: props.loop,
 					autoPlay: props.autoPlay,
-					inFrame: props.inframe ?? 0,
 					inputProps: {
 						segments: props.segments
 					},
@@ -61,13 +68,20 @@ const playerRef = React.createRef<PlayerRef>();
 		}
 	});
 
-	// Seek when inframe changes after mount
 	$effect(() => {
-		if (playerRef.current && typeof props.inframe === 'number') {
-			playerRef.current.seekTo(props.inframe);
+		if (container) {
+			if (playerRef.current) {
+				playerRef.current.addEventListener('frameupdate', (e) => {
+					$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame();
+					console.log('AAAAAAAA');
+				});
+				playerRef.current.addEventListener('seeked', () => {
+					$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame();
+					console.log('AAAAAAAA');
+				});
+			}
 		}
-	});
-	
+	})
 
 	onDestroy(() => {
 		if (root) {
@@ -77,7 +91,22 @@ const playerRef = React.createRef<PlayerRef>();
 </script>
 
 {#if isReady}
-	<div class="remotion-player" bind:this={container}></div>
+	<div class="remotion-player" bind:this={container}
+	onpointerdown={(e) => {
+		e.stopPropagation();
+		$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
+		console.log('current frame is ' + $currentFrame);
+	}}
+	onpointermove={(e) => {
+		e.stopPropagation();
+		$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
+		console.log('current frame is ' + $currentFrame);
+	}}
+	onpointerleave={(e) => {
+		e.stopPropagation();
+		$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
+		console.log('current frame is ' + $currentFrame);
+	}}></div>
 {:else}
 	<div class="remotion-player loading">Loading video segments...</div>
 {/if}

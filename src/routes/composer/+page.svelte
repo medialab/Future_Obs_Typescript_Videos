@@ -3,12 +3,13 @@
 	import renderingIcon from '$lib/assets/icons/inrender.svg';
 	import successIcon from '$lib/assets/icons/success.svg';
 	import errorIcon from '$lib/assets/icons/error.svg';
+	import trashIcon from '$lib/assets/icons/trash.svg';
 
 	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
 	import { renderedVideo } from '$lib/stores';
 	import type { RenderedVideo } from '$lib/stores';
-	import { uploadedVideoFiles, uploadedCsvFile } from '$lib/stores';
+	import { uploadedVideoFiles, uploadedCsvFile, currentFrame } from '$lib/stores';
 	import Header from '$lib/components/header.svelte';
 
 	import RemotionPlayer from '$lib/remotion/RemotionPlayer.svelte';
@@ -16,6 +17,7 @@
 	import type { VideoData } from '$lib/remotion/SingleVideoComp';
 
 	import { csvToJson, triggerBlobDownload } from '$lib/utils';
+	import { storeRenderedVideo, clearFile, loadRenderedVideo } from '$lib/fileStorage';
 
 	let chipStatus = $state<'pending' | 'rendering' | 'success' | 'error'>('pending');
 
@@ -30,7 +32,7 @@
 	let renderProgress = $state(0);
 	let currentScene = $state(0);
 	let renderStatus = $state('Ready to render');
-	let totalDuration = $derived(videos.map(v => v.duration || 0));
+	let totalDuration: number = $derived(videos.reduce((sum, v) => sum + (v.duration || 0), 0));
 
 	$inspect('renderStatus :', renderStatus);
 
@@ -117,7 +119,7 @@
 
 										case 'progress':
 											const { renderedPercent, encodedPercent } = data.data;
-											renderProgress = encodedPercent;
+											renderProgress = (renderedPercent + encodedPercent) / 2;
 											renderStatus = `Rendering: ${renderedPercent}% rendered, ${encodedPercent}% encoded`;
 											break;
 
@@ -226,13 +228,20 @@
 
 			// Step 2: Generate video using the videos with server paths
 			renderStatus = 'Starting render...';
-			const filename = `${videos.map((video) => video.ClipName).join(',')}.mp4`;
+			const filename = `master-video.mp4`;
 			const blob = await generateVideo(renderReadyVideos);
 			
 			renderedVideo.set([{ filename, blob }]);
 			renderStatus = `Completed ${currentScene}/${videos.length}`;
 			chipStatus = 'success';
 			isRendering = false;
+
+			try {
+				await storeRenderedVideo({ filename, blob });
+				console.log('storedVideo :', { filename, blob });
+			} catch (error) {
+				console.error('Error storing rendered video:', error);
+			}
 
 		} catch (error) {
 			console.error(`Error rendering videos:`, error);
@@ -251,8 +260,18 @@
 			console.error('ERROR: Filename is empty!');
 			return;
 		}
+		
 		await triggerBlobDownload(video.blob, video.filename);
 	}
+
+	onMount(async () => {
+		const storedVideo = await loadRenderedVideo();
+		console.log('storedVideo :', storedVideo);
+		if (storedVideo) {
+			renderedVideo.set([storedVideo]);
+			chipStatus = 'success';
+		}
+	});
 
 	onDestroy(() => {
 		videos.forEach((video: any) => {
@@ -265,41 +284,19 @@
 
 <Header type="composer" />
 
-{#snippet timelineElement(filename: string = 'EOLIEN_YTB_22.MP4', videoSrc: string = 'https://picsum.photos/200/300')}
-<div class="container flex v minigap centered">
-	<div class="video_thumb">
-		<img src={videoSrc} alt="" class="video_thumb">
-	</div>
-	<p class="microtitle centered">
-		{filename}
-	</p>
-</div>
-
-<style>
-	.container {
-		width: 100%;
-		max-width: 105px;
-		height: fit-content;
-		background-color: #F2F2F2;
-		border-radius: 10px;
-		border: 1px solid #D6D6D6;
-		padding: 6px;
-		overflow: hidden;
-	}
-
-	.video_thumb {
-		width: 100%;
-		height: 50px;
-		object-fit: cover;
-		object-position: center;
-		border-radius: 7px;
-		border: 1px solid #D6D6D6;
-	}
-</style>
-{/snippet}
-
-{#snippet timelinePill(video?: VideoData)}
-<div class="container flex v minigap centered" style="width: {video?.duration}px;"></div>
+{#snippet timelinePill(video?: VideoData, index: number = 0)}
+{@const fps = 30}
+{@const startFrame = videos.slice(0, index).reduce((sum, v) => sum + (v.duration || 0) * fps, 0)}
+{@const endFrame = startFrame + (video?.duration || 0) * fps}
+{@const isActive = $currentFrame >= startFrame && $currentFrame < endFrame}
+<button
+class="container flex v minigap centered"
+class:success={isActive}
+style="width: {video?.duration ? (video.duration / totalDuration * 100) + '%' : '0px'};"
+onclick={() => {
+	$currentFrame = startFrame + 1; //The one is perceptual for the first segment
+}}>
+<p class="microtitle">{(video as any)?.ClipName || 'Video_1.mp4'}</p></button>
 
 <style>
 	.container {
@@ -308,6 +305,7 @@
 		border-radius: 50px;
 		border: 1px solid #6B74C4;
 		background-color: #C6CCFF;
+		transition: background-color 0.2s ease;
 	}
 </style>
 {/snippet}
@@ -356,42 +354,51 @@
 			</p>
 		</div>
 		{#key videos && $uploadedVideoFiles && $uploadedCsvFile}
-			<RemotionPlayer segments={videos} controls={true} loop={false} autoPlay={false} inframe={renderProgress * 10}/>
+			<RemotionPlayer segments={videos} controls={true} loop={false} autoPlay={false}/>
 		{/key}
 		<div class="timeline flex h minigap">
-			{#each videos as v}
-				{@render timelinePill(v)}
+			{#each videos as v, index}
+				{@render timelinePill(v, index)}
 			{/each}
 		</div>
 	</div>
 	<div class="flex v mediumgap" id="alert_container" style="overflow: hidden;">
 		<p class="title">Render status</p>
 		<div class="flex v minigap">
-			{@render renderChip(chipStatus)}
+			{@render renderChip(chipStatus, $renderedVideo[0].filename, $renderedVideo[0].blob?.size || 0)}
 		</div>
 	</div>
 </section>
 
-{#snippet renderChip(state: 'pending' | 'rendering' | 'success' | 'error' = 'pending', filename: string = 'Video_1.mp4', size: number = 332)}
+{#snippet renderChip(state: 'pending' | 'rendering' | 'success' | 'error' = 'pending', filename: string, size: number = 332)}
+
 <div class="chip_father flex v minigap centered">
-	<div class="absolute_dot" class:pending={state === 'pending'}
-	class:warning={state === 'rendering'}
-	class:success={state === 'success'}
-	class:error={state === 'error'}></div>
+	{#if state !== 'pending'}
+	<div class="absolute_dot"
+		class:warning={state === 'rendering'}
+		class:success={state === 'success'}
+		class:error={state === 'error'}></div>
+	{/if}
 	<div class="chip flex h centered mediumgap">
 		<button class="chip_img flex centered"
-			onclick={state === 'pending' ? () => {renderAllVideos()} : state === 'success' ? () => {downloadRenderedVideo($renderedVideo[0])} : () => {}}
-			class:pending={state === 'pending'}
-			class:warning={state === 'rendering'}
-			class:success={state === 'success'}
-			class:error={state === 'error'}
+				onclick={state === 'pending' ? () => {renderAllVideos()} : state === 'success' ? () => {downloadRenderedVideo($renderedVideo[0])} : () => {}}
+				class:pending={state === 'pending'}
+				class:warning={state === 'rendering'}
+				class:success={state === 'success'}
+				class:error={state === 'error'}
 			>
 			<img src={state === 'pending' ? pendingIcon : state === 'rendering' ? renderingIcon : state === 'success' ? successIcon : errorIcon} alt={state}/>
-	</button>
-			<div class="flex v minigap">
-				<p class="annotation">{filename}</p>
-				<p class="microtitle">{size} MB</p>
-			</div>
+		</button>
+
+			{#if state === 'success'}
+				<div class="flex v minigap">
+					<p class="annotation">{filename}</p>
+					<p class="microtitle">{size} MB</p>
+				</div>
+				<button class="trash_btn flex centered" onclick={async () => await clearFile(filename).then(() => {chipStatus = 'pending'; renderProgress = 0})}>
+					<img src={trashIcon} alt="trash" />
+				</button>
+			{/if}
 	</div>
 	<progress id="render-progress" class="render_progress" class:success={state === 'success'} value={renderProgress} max="100"></progress>
 </div>
@@ -401,7 +408,7 @@
 			height: fit-content;
 			border: 1px solid #D6D6D6;
 			background-color: #FFF;
-			padding: 5px 15px 5px 5px;
+			padding: 5px 5px 5px 5px;
 			border-radius: 15px;
 			position: relative;
 			overflow: visible;

@@ -4,7 +4,8 @@ import { getCompositions, renderMedia } from '@remotion/renderer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import type { VideoData } from '$lib/remotion/SingleVideoComp';
-import { mkdir, writeFile } from 'fs/promises';
+import { mkdir, writeFile, rm } from 'fs/promises'; // Add 'rm' for cleanup
+import { unlink } from 'fs/promises'; // Add unlink for deleting individual files
 import { error } from '@sveltejs/kit';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -25,6 +26,10 @@ export async function POST({ request }: RequestEvent) {
 
 	const { videos } = await request.json();
 	const origin = process.env.ASSET_ORIGIN ?? new URL(request.url).origin;
+
+	const videoFilePaths: string[] = (videos as VideoData[])
+		.map((video) => (video as any).videoSrcPath)
+		.filter((path): path is string => Boolean(path));
 
 	const renderingVideos: VideoData[] = (videos as VideoData[]).map((video) => {
 		// Prefer absolute http(s) URL for renderer to download
@@ -51,6 +56,7 @@ export async function POST({ request }: RequestEvent) {
 		async start(controller) {
 			const encoder = new TextEncoder();
 			let closed = false;
+			let bundleLocation: string | null = null; // Track bundle location for cleanup
 
 			const sendMessage = (type: string, data: any) => {
 				if (closed) return;
@@ -64,6 +70,40 @@ export async function POST({ request }: RequestEvent) {
 				controller.close();
 			};
 
+			// Cleanup function - now handles both bundle and static/videos files
+			const cleanup = async () => {
+				// Clean up bundle directory
+				if (bundleLocation) {
+					try {
+						console.log('Cleaning up bundle location:', bundleLocation);
+						await rm(bundleLocation, { recursive: true, force: true });
+						console.log('Bundle cleanup complete');
+					} catch (cleanupError) {
+						console.error('Error cleaning up bundle:', cleanupError);
+					}
+				}
+
+				// Clean up static/videos files
+				if (videoFilePaths.length > 0) {
+					try {
+						console.log('Cleaning up static/videos files:', videoFilePaths.length, 'files');
+						await Promise.all(
+							videoFilePaths.map(async (filePath) => {
+								try {
+									await unlink(filePath);
+									console.log('Deleted:', filePath);
+								} catch (fileError) {
+									console.error(`Error deleting file ${filePath}:`, fileError);
+								}
+							})
+						);
+						console.log('Static/videos cleanup complete');
+					} catch (cleanupError) {
+						console.error('Error cleaning up static/videos files:', cleanupError);
+					}
+				}
+			};
+
 			try {
 				sendMessage('status', { message: 'Starting bundling...' });
 
@@ -75,7 +115,7 @@ export async function POST({ request }: RequestEvent) {
 
 				sendMessage('status', { message: 'Bundling Remotion project...' });
 
-				const bundleLocation = await bundle({
+				bundleLocation = await bundle({
 					entryPoint,
 					publicDir: path.resolve(projectRoot, 'static'),
 					webpackOverride: (config) => {
@@ -122,6 +162,7 @@ export async function POST({ request }: RequestEvent) {
 					sendMessage('error', {
 						message: `Composition "VideoComp" not found. Available: ${compositions.map((c) => c.id).join(', ')}`
 					});
+					await cleanup(); // Clean up before closing
 					closeController();
 					return;
 				}
@@ -159,6 +200,7 @@ export async function POST({ request }: RequestEvent) {
 
 				if (!buffer) {
 					sendMessage('error', { message: 'No buffer returned' });
+					await cleanup(); // Clean up before closing
 					closeController();
 					return;
 				}
@@ -174,6 +216,9 @@ export async function POST({ request }: RequestEvent) {
 					filename: 'master-video.mp4'
 				});
 
+				// Clean up bundle directory after successful render
+				await cleanup();
+
 				closeController();
 			} catch (error) {
 				const errorMessage = error instanceof Error ? error.message : String(error);
@@ -181,6 +226,10 @@ export async function POST({ request }: RequestEvent) {
 				console.error('Error rendering video:', errorMessage);
 				console.error('Stack:', errorStack);
 				sendMessage('error', { message: errorMessage, stack: errorStack });
+				
+				// Clean up even on error
+				await cleanup();
+				
 				closeController();
 			}
 		}
