@@ -2,21 +2,28 @@
 	import excelIcon from '$lib/assets/icons/excel.svg';
 	import videoIcon from '$lib/assets/icons/video.svg';
 	import Header from '$lib/components/header.svelte';
-	
+
 	import Alert from '$lib/components/alerts.svelte';
 	import eraseIcon from '$lib/assets/icons/erase.svg';
 	import arrowIcon from '$lib/assets/icons/arrow.svg';
 	import Papa from 'papaparse';
 	import InputFile from '$lib/components/inputFile.svelte';
-	import { csvVideoFilenames, uploadedVideoFiles, missingFilenames, emptyCellsInCsv, uploadedCsvFile, unknownFiles } from '$lib/stores';
+	import {
+		csvVideoFilenames,
+		uploadedVideoFiles,
+		missingFilenames,
+		emptyCellsInCsv,
+		uploadedCsvFile,
+		unknownFiles
+	} from '$lib/stores';
 	import { untrack } from 'svelte';
 	import { clearFiles } from '$lib/fileStorage';
 
 	import { afterNavigate } from '$app/navigation';
 	import { onMount } from 'svelte';
 
-	import { fly } from "svelte/transition";
-    import { cubicOut } from "svelte/easing";
+	import { fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 
 	let csvData = $state<string>('');
 
@@ -39,16 +46,17 @@
 	};
 
 	const checkCrossFiles = async () => {
-		const uploadedFileNames = $uploadedVideoFiles.map(file => file.name);
+		const uploadedFileNames = $uploadedVideoFiles.map((file) => file.name);
 		const missing: string[] = [];
 
 		for (const csvFilename of $csvVideoFilenames) {
-			const hasMatch = uploadedFileNames.some(uploadedName => 
-				uploadedName === csvFilename || 
-				uploadedName === `${csvFilename}.mp4` ||
-				uploadedName.startsWith(csvFilename)
+			const hasMatch = uploadedFileNames.some(
+				(uploadedName) =>
+					uploadedName === csvFilename ||
+					uploadedName === `${csvFilename}.mp4` ||
+					uploadedName.startsWith(csvFilename)
 			);
-			
+
 			if (!hasMatch) {
 				missing.push(csvFilename);
 			}
@@ -58,14 +66,14 @@
 			return;
 		}
 
-		csvData.split(',').forEach(el => {
+		csvData.split(',').forEach((el) => {
 			if (el.trim().length > 0) {
 				$emptyCellsInCsv.push(el.trim());
 			} else {
 				$emptyCellsInCsv.splice($emptyCellsInCsv.indexOf(el.trim()), 1);
 			}
 		});
-		
+
 		untrack(() => {
 			$missingFilenames = missing;
 		});
@@ -155,7 +163,7 @@
 	};
 </script>
 
-<Header type="home"/>
+<Header type="home" />
 
 {#snippet upload_container(icon: string, files: boolean, type: 'csv' | 'video')}
 	<div class="upload_greyzone flex v centered">
@@ -181,11 +189,11 @@
 					{/if}
 				</p>
 				{#if type === 'csv' && $uploadedCsvFile}
-						{Math.ceil($uploadedCsvFile?.size / 1024) + ' KB' || 'Max 500 MB'}
-					{:else if type === 'video' && $uploadedVideoFiles.length > 0}
-						{$uploadedVideoFiles.length} videos uploaded
-					{:else}
-						In batch, or single files
+					{Math.ceil($uploadedCsvFile?.size / 1024) + ' KB' || 'Max 500 MB'}
+				{:else if type === 'video' && $uploadedVideoFiles.length > 0}
+					{$uploadedVideoFiles.length} videos uploaded
+				{:else}
+					In batch, or single files
 				{/if}
 			</label>
 			<input
@@ -201,7 +209,7 @@
 		{#if files}
 			<div class="uploaded_files_container flex r minigap">
 				{#each $uploadedVideoFiles as file}
-					<InputFile file={file} />
+					<InputFile {file} />
 				{/each}
 			</div>
 		{/if}
@@ -270,7 +278,9 @@
 			</div>
 			<div class="flex v minigap">
 				<p class="microtitle">Total payload:</p>
-				<p class="annotation">{Math.ceil($uploadedVideoFiles.reduce((acc, file) => acc + file.size, 0) / 1024 / 1024)} mb</p>
+				<p class="annotation">
+					{Math.ceil($uploadedVideoFiles.reduce((acc, file) => acc + file.size, 0) / 1024 / 1024)} mb
+				</p>
 			</div>
 			<div class="flex v minigap">
 				<p class="microtitle">CSV Rows:</p>
@@ -286,19 +296,22 @@
 		{@render upload_container(excelIcon, false, 'csv')}
 		{@render upload_container(videoIcon, true, 'video')}
 		<div class="flex h spacebetween">
-
 			<button class="flex h minigap centered" onclick={clearQueue}>
-				<img src={eraseIcon} alt="Process all" class="btn_icon">
+				<img src={eraseIcon} alt="Process all" class="btn_icon" />
 				<p class="annotation" style="color: #C7C7C7;">Clear whole queue</p>
 			</button>
 
-			<button class="flex h minigap success centered" class:disabled={$missingFilenames.length !== 0 || $uploadedCsvFile === null}>
-				<a href="/composer" >
+			<button
+				class="flex h minigap success centered"
+				class:disabled={$missingFilenames.length !== 0 ||
+					$uploadedCsvFile === null ||
+					$uploadedVideoFiles.length === 0}
+			>
+				<a href="/composer">
 					<p class="annotation">Process all</p>
 				</a>
-				<img src={arrowIcon} alt="Process all" class="btn_icon">
+				<img src={arrowIcon} alt="Process all" class="btn_icon" />
 			</button>
-		
 		</div>
 	</div>
 	<div class="flex v" id="alert_container" style="overflow: hidden;">
@@ -306,24 +319,27 @@
 		<div class="flex v minigap">
 			{#if $missingFilenames.length > 0 || $unknownFiles.length > 0}
 				{#each $missingFilenames as filename, index}
-					<div in:fly={{ x: 100, duration: 300, easing: cubicOut, delay: index * 100 }} out:fly={{ x: 100, duration: 300, easing: cubicOut, delay: index * 100 }}>
+					<div
+						in:fly={{ x: 100, duration: 300, easing: cubicOut, delay: index * 100 }}
+						out:fly={{ x: 100, duration: 300, easing: cubicOut, delay: index * 100 }}
+					>
 						<Alert type="error" message="No file uploaded for {filename}" />
 					</div>
 				{/each}
 				{#each $unknownFiles as unknownFile, index}
-					<div in:fly={{ x: 100, duration: 300, easing: cubicOut, delay: index * 100 }} out:fly={{ x: 100, duration: 300, easing: cubicOut, delay: index * 100 }}>
+					<div
+						in:fly={{ x: 100, duration: 300, easing: cubicOut, delay: index * 100 }}
+						out:fly={{ x: 100, duration: 300, easing: cubicOut, delay: index * 100 }}
+					>
 						<Alert type="warning" message="No csv row for {unknownFile}" />
 					</div>
 				{/each}
 			{:else}
-					<p class="annotation">No alerts, everything is good!</p>
+				<p class="annotation">No alerts, everything is good!</p>
 			{/if}
 		</div>
 	</div>
 </section>
 
 <style>
-
-	
-	
 </style>

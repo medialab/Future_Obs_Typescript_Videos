@@ -6,39 +6,39 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { RequestEvent } from '@sveltejs/kit';
 import type { VideoData } from '$lib/remotion/SingleVideoComp';
+import { readdir, stat, unlink } from 'fs/promises';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ASSET_EXT_RE = /\.(mp4|mov|mkv|avi)$/i;
-const TTL_MS = 25 * 60 * 1000; // 25 minutes
+const TTL_MS = 25 * 60 * 1000;
+// Use repo-level tmp/uploads so read/cleanup endpoints resolve the same folder
+const TMP_VIDEOS_DIR = path.join(process.cwd(), 'tmp/uploads');
 
-// Save to project-root/static/videos (not src/static)
-const STATIC_VIDEOS_DIR = path.resolve(__dirname, '../../../../../static/videos');
-
-async function ensureStaticVideosDir() {
+async function ensureDirExistence(dir: string) {
 	try {
-		await mkdir(STATIC_VIDEOS_DIR, { recursive: true });
+		await mkdir(dir, { recursive: true });
 	} catch (err) {
-		console.error('Error creating static videos directory:', err);
+		console.error('Error creating temp videos directory:', err);
 	}
 }
 
-async function cleanupOldVideos() {
+async function cleanupOldVideos(dir: string) {
 	try {
-		const entries = await (await import('fs/promises')).readdir(STATIC_VIDEOS_DIR, {
+		const entries = await readdir(dir, {
 			withFileTypes: true
 		});
-		const now = Date.now();
+		const now = Date.now(); //get time
+
 		for (const entry of entries) {
-			if (!entry.isFile()) continue;
-			if (!ASSET_EXT_RE.test(entry.name)) continue;
-			const full = path.join(STATIC_VIDEOS_DIR, entry.name);
-			const st = await (await import('fs/promises')).stat(full);
+			if (!entry.isFile() || !ASSET_EXT_RE.test(entry.name)) continue;
+			const full = path.join(dir, entry.name);
+			const st = await stat(full);
 			if (now - st.mtimeMs > TTL_MS) {
-				await (await import('fs/promises')).unlink(full);
+				await unlink(full);
 			}
 		}
-        console.log('🧹 Cleanup completed');
+		console.log('🧹 Cleanup completed');
 	} catch (err) {
 		console.warn('Cleanup skipped:', err);
 	}
@@ -46,68 +46,75 @@ async function cleanupOldVideos() {
 
 export const POST = async ({ request }: RequestEvent) => {
 	try {
-		await ensureStaticVideosDir();
-		await cleanupOldVideos();
+		await ensureDirExistence(TMP_VIDEOS_DIR as string);
+		await cleanupOldVideos(TMP_VIDEOS_DIR as string);
 
 		const formData = await request.formData();
-		
-		// Get the videos array from JSON
+
 		const videosJson = formData.get('videos') as string;
 
 		if (!videosJson) {
 			throw error(400, 'No videos data provided');
 		}
-		
+
 		const videos: VideoData[] = JSON.parse(videosJson);
-		
-		// Get all video files
 		const videoFiles = formData.getAll('files') as File[];
-		
+
 		if (videoFiles.length === 0) {
 			throw error(400, 'No video files provided');
 		}
-		
-		// Create a map of ClipName to File for easy lookup
+
 		const fileMap = new Map<string, File>();
-		videoFiles.forEach(file => {
-			// Match by filename (remove extension)
+		videoFiles.forEach((file) => {
 			const nameWithoutExt = file.name.replace(/\.(mp4|mov|avi|mkv)$/i, '');
 			fileMap.set(nameWithoutExt, file);
 		});
-		
-		// Process each video: save file and update path
+
 		const updatedVideos = await Promise.all(
 			videos.map(async (video) => {
-				// Try to find matching file by ClipName
 				const clipName = (video as any).ClipName?.trim();
 				if (!clipName) {
 					console.warn('Video missing ClipName, skipping:', video);
 					return video;
 				}
-				
+
 				const matchingFile = fileMap.get(clipName);
 				if (!matchingFile) {
 					console.warn(`No matching file found for ClipName: ${clipName}`);
 					return video;
 				}
-				
-				// Generate unique filename
+
 				const fileExtension = matchingFile.name.split('.').pop() || 'mp4';
-				const filename = `${uuidv4()}-${clipName}.${fileExtension}`;
-				const filepath = path.join(STATIC_VIDEOS_DIR, filename);
-				
-				// Save file to static/videos directory
-				const arrayBuffer = await matchingFile.arrayBuffer();
-				await writeFile(filepath, Buffer.from(arrayBuffer));
-				
+				const filename = `${uuidv4()}-${clipName}.${fileExtension}`; //temp crypt
+				const filepath = path.join(TMP_VIDEOS_DIR, filename);
+
+				await writeFile(filepath, Buffer.from(await matchingFile.arrayBuffer()));
+
+				// Verify file exists and is readable before proceeding
+				let retries = 5;
+				while (retries > 0) {
+					try {
+						const fileStats = await stat(filepath);
+						if (fileStats.size > 0) {
+							break; // File exists and has content, proceed
+						}
+					} catch (err) {
+						retries--;
+						if (retries === 0) {
+							throw new Error(`File ${filename} was not accessible after write`);
+						}
+						await new Promise((resolve) => setTimeout(resolve, 100)); // Wait 100ms and retry
+					}
+				}
+
 				return {
 					...video,
-					videoSrc: `/videos/${filename}`, // HTTP URL for client-side
-					videoSrcPath: filepath  // Absolute file path for server-side rendering
+					videoSrc: `composer/api/files/${filename}`,
+					videoSrcPath: filepath
 				};
 			})
 		);
-		
+
 		return json({ videos: updatedVideos });
 	} catch (err) {
 		console.error('Upload error:', err);

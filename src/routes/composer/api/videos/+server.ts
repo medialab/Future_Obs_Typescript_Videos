@@ -7,21 +7,12 @@ import type { VideoData } from '$lib/remotion/SingleVideoComp';
 import { mkdir, writeFile, rm } from 'fs/promises'; // Add 'rm' for cleanup
 import { unlink } from 'fs/promises'; // Add unlink for deleting individual files
 import { error } from '@sveltejs/kit';
+import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const TEMP_DIR = path.resolve(__dirname, '../../../../temp/uploads');
-
-async function ensureTempDir() {
-	try {
-		await mkdir(TEMP_DIR, { recursive: true });
-	} catch (error) {
-	}
-}
-
 export async function POST({ request }: RequestEvent) {
-
 	process.env.REMOTION_RENDERING = 'true';
 
 	const { videos } = await request.json();
@@ -42,8 +33,11 @@ export async function POST({ request }: RequestEvent) {
 		const renderSrc = video.renderSrc || normalizedVideoSrc;
 
 		if (!renderSrc) {
-			throw error(400, `Missing renderSrc/videoSrc for clip: ${(video as any).ClipName || 'unknown'}`);
-		  }
+			throw error(
+				400,
+				`Missing renderSrc/videoSrc for clip: ${(video as any).ClipName || 'unknown'}`
+			);
+		}
 
 		return {
 			...video,
@@ -107,11 +101,73 @@ export async function POST({ request }: RequestEvent) {
 			try {
 				sendMessage('status', { message: 'Starting bundling...' });
 
-				// Fix: Go up 5 levels from src/routes/composer/api/videos/ to project root
-				const projectRoot = path.resolve(__dirname, '../../../../..');
+				// Verify all video files exist and are accessible before starting render
+				sendMessage('status', { message: 'Verifying video files...' });
+				for (const video of renderingVideos) {
+					const videoUrl = video.renderSrc;
+					if (videoUrl && videoUrl.startsWith('http')) {
+						try {
+							const response = await fetch(videoUrl, { method: 'HEAD' });
+							if (!response.ok) {
+								throw error(
+									404,
+									`Video file not accessible: ${videoUrl} (status: ${response.status})`
+								);
+							}
+							console.log(`Verified video file: ${videoUrl}`);
+						} catch (fetchError) {
+							if (fetchError instanceof Error && 'status' in fetchError) {
+								throw fetchError;
+							}
+							throw error(
+								404,
+								`Video file not accessible: ${videoUrl} - ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`
+							);
+						}
+					}
+				}
+				sendMessage('status', { message: 'All video files verified' });
+
+				// Find project root by looking for package.json or svelte.config.js
+				let projectRoot = process.cwd();
+				let currentDir = __dirname;
+
+				// Traverse up until we find package.json or svelte.config.js
+				while (currentDir !== path.dirname(currentDir)) {
+					if (
+						existsSync(path.join(currentDir, 'package.json')) ||
+						existsSync(path.join(currentDir, 'svelte.config.js'))
+					) {
+						projectRoot = currentDir;
+						break;
+					}
+					currentDir = path.dirname(currentDir);
+				}
+
+				// Verify we found the correct project root by checking for src/lib/remotion/index.ts
+				const entryPointCheck = path.resolve(projectRoot, 'src/lib/remotion/index.ts');
+				if (!existsSync(entryPointCheck)) {
+					// Fallback: try process.cwd() if the traversal didn't work
+					const fallbackEntryPoint = path.resolve(process.cwd(), 'src/lib/remotion/index.ts');
+					if (existsSync(fallbackEntryPoint)) {
+						projectRoot = process.cwd();
+					} else {
+						throw error(
+							500,
+							`Could not find project root. Checked: ${projectRoot} and ${process.cwd()}. Entry point should be at: src/lib/remotion/index.ts`
+						);
+					}
+				}
+
+				console.log('Project root resolved to:', projectRoot);
 
 				// Fix: Use projectRoot to resolve the entry point
 				const entryPoint = path.resolve(projectRoot, 'src/lib/remotion/index.ts');
+
+				// Verify entry point exists
+				if (!existsSync(entryPoint)) {
+					throw error(500, `Entry point not found: ${entryPoint}`);
+				}
 
 				sendMessage('status', { message: 'Bundling Remotion project...' });
 
@@ -222,14 +278,21 @@ export async function POST({ request }: RequestEvent) {
 				closeController();
 			} catch (error) {
 				const errorMessage = error instanceof Error ? error.message : String(error);
+				// Remove verbose HTML response body from error messages
+				const cleanMessage = errorMessage.includes('The response body was:')
+					? errorMessage.split('The response body was:')[0].trim()
+					: errorMessage;
+
+				console.error('Error rendering video:', cleanMessage);
 				const errorStack = error instanceof Error ? error.stack : undefined;
-				console.error('Error rendering video:', errorMessage);
-				console.error('Stack:', errorStack);
-				sendMessage('error', { message: errorMessage, stack: errorStack });
-				
+				if (errorStack) {
+					console.error('Stack:', errorStack);
+				}
+				sendMessage('error', { message: cleanMessage });
+
 				// Clean up even on error
-				await cleanup();
-				
+				//await cleanup();
+
 				closeController();
 			}
 		}

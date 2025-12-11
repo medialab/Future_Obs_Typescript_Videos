@@ -35,8 +35,6 @@ export const SingleVideoComp: React.FC<{
 		return null;
 	}
 
-	// For server-side rendering, use absolute file path from videoSrcPath
-	// For client-side, use HTTP URL
 	let staticVideoSrc: string;
 	const renderMode =
 		typeof process !== 'undefined' && process.env?.REMOTION_RENDERING === 'true'
@@ -44,15 +42,14 @@ export const SingleVideoComp: React.FC<{
 			: Boolean(isRendering || data.isRendering);
 
 	if (renderMode) {
-		// Renderer path: prefer explicit renderSrc (http/https), fallback to provided videoSrc
 		staticVideoSrc = data.renderSrc || videoSrc;
 	} else {
-		// Client-side preview: use blob/http/relative paths
-		staticVideoSrc = videoSrc.startsWith('blob:') || videoSrc.startsWith('http')
-			? videoSrc
-			: videoSrc.startsWith('/')
+		staticVideoSrc =
+			videoSrc.startsWith('blob:') || videoSrc.startsWith('http')
 				? videoSrc
-				: `/${videoSrc}`;
+				: videoSrc.startsWith('/')
+					? videoSrc
+					: `/${videoSrc}`;
 	}
 
 	const commentsArray = (data.Comments || '§ Comment manquant')
