@@ -142,19 +142,36 @@ The terminal will show the preview URL (often `http://localhost:4173`).
 
 ## 7. Run via Docker (optional)
 
-This repo includes `multistep.dockerfile`. A typical Docker workflow:
+This repo includes `multistep.dockerfile`, which builds a **production** image using the Node adapter and serves the built app on **port 3000** inside the container.
+
+### 7.1 Build the image
+
+From the project root:
 
 ```bash
-# from project root
 docker build -f multistep.dockerfile -t future-obs-typescript-videos .
+```
 
-# run the container and expose the dev/serve port
+### 7.2 Run the container
+
+Run the built image and expose port 3000:
+
+```bash
 docker run --rm -p 5173:5173 future-obs-typescript-videos
 ```
 
-Then open `http://localhost:5173` (or whichever port the app prints) in your browser.
+Then open `http://localhost:5173` in your browser.
 
-If the app uses a different internal port, adjust the `-p HOST:CONTAINER` mapping accordingly.
+The Dockerfile also creates `/app/tmp/uploads` inside the container.  
+If you need to persist uploaded files across container restarts, you can mount a volume:
+
+```bash
+docker run --rm -p 5173:5173 \
+  -v $(pwd)/uploads:/app/tmp/uploads \
+  future-obs-typescript-videos
+```
+
+If your deployment environment requires environment variables (e.g. API keys), pass them with `-e KEY=value` or `--env-file` when running `docker run`.
 
 ---
 

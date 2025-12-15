@@ -13,10 +13,16 @@
 	let status = $state<'pending' | 'correct' | 'incorrect'>('pending');
 
     const getFileStatus = async (fileName: string, csvVideoFilenames: string[]) => {
+		if (!fileName) return 'pending';
+
 		if (csvVideoFilenames && csvVideoFilenames.length > 0) {
-            
             const cleanFilename = fileName.replace('.mp4', '').replace('.mov', '');
-			const foundFilename = csvVideoFilenames.find(videoFilename => videoFilename.includes(cleanFilename));
+
+			// defensively handle unexpected non-string entries
+			const foundFilename = csvVideoFilenames.find(
+				(videoFilename) =>
+					typeof videoFilename === 'string' && videoFilename.includes(cleanFilename)
+			);
 
             if (!foundFilename) {
 				untrack(() =>
