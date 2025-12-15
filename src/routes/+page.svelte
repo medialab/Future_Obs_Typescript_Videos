@@ -12,7 +12,6 @@
 		csvVideoFilenames,
 		uploadedVideoFiles,
 		missingFilenames,
-		emptyCellsInCsv,
 		uploadedCsvFile,
 		unknownFiles
 	} from '$lib/stores';
@@ -62,18 +61,6 @@
 			}
 		}
 
-		if (!csvData || csvData.length === 0) {
-			return;
-		}
-
-		csvData.split(',').forEach((el) => {
-			if (el.trim().length > 0) {
-				$emptyCellsInCsv.push(el.trim());
-			} else {
-				$emptyCellsInCsv.splice($emptyCellsInCsv.indexOf(el.trim()), 1);
-			}
-		});
-
 		untrack(() => {
 			$missingFilenames = missing;
 		});
@@ -105,43 +92,6 @@
 			await checkCrossFiles();
 		}
 	});
-
-	//Check all video presence in csv
-	/*$effect(() => {
-		const uploadedFileNames = $uploadedVideoFiles.map(file => file.name);
-		const missing: string[] = [];
-
-		for (const csvFilename of $csvVideoFilenames) {
-			const hasMatch = uploadedFileNames.some(uploadedName => 
-				uploadedName === csvFilename || 
-				uploadedName === `${csvFilename}.mp4` ||
-				uploadedName.startsWith(csvFilename)
-			);
-			
-			if (!hasMatch) {
-				missing.push(csvFilename);
-			}
-		}
-		
-		untrack(() => {
-			$missingFilenames = missing;
-		});
-	});
-
-	//Check for empty cells in csv
-	$effect(() => {
-		if (!csvData || csvData.length === 0) {
-			return;
-		}
-
-		csvData.split(',').forEach(el => {
-			if (el.trim().length > 0) {
-				$emptyCellsInCsv.push(el.trim());
-			} else {
-				$emptyCellsInCsv.splice($emptyCellsInCsv.indexOf(el.trim()), 1);
-			}
-		});
-	});*/
 
 	const handleFiles = async (files: FileList | null, type: 'csv' | 'video') => {
 		if (!files?.length) return;

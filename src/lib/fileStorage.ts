@@ -1,7 +1,6 @@
 // IndexedDB utility for storing File objects persistently
 import type { RenderedVideo } from './stores';
 
-
 const DB_NAME = 'videoFilesDB';
 const DB_VERSION = 2; // Increment from 1 to 2 to trigger upgrade
 const STORE_NAME = 'uploadedFiles';
@@ -25,7 +24,7 @@ export async function initDB(): Promise<IDBDatabase> {
 
 		request.onupgradeneeded = (event) => {
 			const database = (event.target as IDBOpenDBRequest).result;
-			
+
 			// Store for video files
 			if (!database.objectStoreNames.contains(STORE_NAME)) {
 				database.createObjectStore(STORE_NAME, { keyPath: 'name' });
@@ -47,14 +46,17 @@ export async function initDB(): Promise<IDBDatabase> {
 export async function clearFile(filename: string): Promise<void> {
 	console.log('[clearFile] Starting to clear file:', filename);
 	const database = await initDB();
-	console.log('[clearFile] Database initialized, available stores:', Array.from(database.objectStoreNames));
-	
+	console.log(
+		'[clearFile] Database initialized, available stores:',
+		Array.from(database.objectStoreNames)
+	);
+
 	// Search through uploadedFiles store (keyPath is 'name')
 	console.log('[clearFile] Searching in uploadedFiles store...');
 	try {
 		const videoTransaction = database.transaction([STORE_NAME], 'readwrite');
 		const videoStore = videoTransaction.objectStore(STORE_NAME);
-		
+
 		await new Promise<void>((resolve, reject) => {
 			const request = videoStore.delete(filename);
 			request.onsuccess = () => {
@@ -76,7 +78,7 @@ export async function clearFile(filename: string): Promise<void> {
 	try {
 		const csvTransaction = database.transaction([CSV_STORE_NAME], 'readwrite');
 		const csvStore = csvTransaction.objectStore(CSV_STORE_NAME);
-		
+
 		await new Promise<void>((resolve, reject) => {
 			const getRequest = csvStore.get('csv');
 			getRequest.onsuccess = () => {
@@ -111,20 +113,25 @@ export async function clearFile(filename: string): Promise<void> {
 	// Search through renderedVideo store if it exists
 	const hasRenderedStore = database.objectStoreNames.contains(RENDERED_VIDEO_STORE_NAME);
 	console.log('[clearFile] Rendered video store exists:', hasRenderedStore);
-	
+
 	if (hasRenderedStore) {
 		console.log('[clearFile] Searching in renderedVideo store...');
 		try {
 			const renderedTransaction = database.transaction([RENDERED_VIDEO_STORE_NAME], 'readwrite');
 			const renderedStore = renderedTransaction.objectStore(RENDERED_VIDEO_STORE_NAME);
-			
+
 			await new Promise<void>((resolve, reject) => {
 				const cursorRequest = renderedStore.openCursor();
 				cursorRequest.onsuccess = (event) => {
 					const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
 					if (cursor) {
 						const video = cursor.value as RenderedVideo;
-						console.log('[clearFile] Checking rendered video:', video.filename, 'against:', filename);
+						console.log(
+							'[clearFile] Checking rendered video:',
+							video.filename,
+							'against:',
+							filename
+						);
 						if (video.filename === filename) {
 							console.log('[clearFile] Filename matches, deleting rendered video...');
 							cursor.delete();
@@ -140,7 +147,10 @@ export async function clearFile(filename: string): Promise<void> {
 					}
 				};
 				cursorRequest.onerror = () => {
-					console.error('[clearFile] Error opening cursor in renderedVideo store:', cursorRequest.error);
+					console.error(
+						'[clearFile] Error opening cursor in renderedVideo store:',
+						cursorRequest.error
+					);
 					reject(cursorRequest.error);
 				};
 			});
@@ -151,7 +161,7 @@ export async function clearFile(filename: string): Promise<void> {
 	} else {
 		console.log('[clearFile] Rendered video store does not exist, skipping');
 	}
-	
+
 	console.log('[clearFile] Finished clearing file:', filename);
 }
 
@@ -165,7 +175,7 @@ export async function saveFiles(files: File[]): Promise<void> {
 	await store.clear();
 
 	// Save new files
-	const savePromises = files.map(file => {
+	const savePromises = files.map((file) => {
 		return new Promise<void>((resolve, reject) => {
 			const request = store.put({
 				name: file.name,
@@ -203,7 +213,7 @@ export async function clearFiles(): Promise<void> {
 	const database = await initDB();
 	const transaction = database.transaction([STORE_NAME], 'readwrite');
 	const store = transaction.objectStore(STORE_NAME);
-	
+
 	return new Promise((resolve, reject) => {
 		const request = store.clear();
 		request.onsuccess = () => resolve();
@@ -213,7 +223,7 @@ export async function clearFiles(): Promise<void> {
 
 export async function storeRenderedVideo(video: RenderedVideo): Promise<void> {
 	const database = await initDB();
-	
+
 	// Check if store exists, if not, we need to upgrade
 	if (!database.objectStoreNames.contains(RENDERED_VIDEO_STORE_NAME)) {
 		// Close and reopen with higher version to trigger upgrade
@@ -224,10 +234,10 @@ export async function storeRenderedVideo(video: RenderedVideo): Promise<void> {
 			throw new Error('Rendered video store not available. Please refresh the page.');
 		}
 	}
-	
+
 	const transaction = database.transaction([RENDERED_VIDEO_STORE_NAME], 'readwrite');
 	const store = transaction.objectStore(RENDERED_VIDEO_STORE_NAME);
-	
+
 	return new Promise((resolve, reject) => {
 		const request = store.put(video);
 		request.onsuccess = () => resolve();
@@ -272,22 +282,8 @@ export async function loadCsvFile(): Promise<File | undefined> {
 		const request = store.get('csv');
 		request.onsuccess = () => {
 			const result = request.result;
-			resolve(result ? result.file as File : undefined);
+			resolve(result ? (result.file as File) : undefined);
 		};
-		request.onerror = () => reject(request.error);
-	});
-}
-
-// Clear all data (both files and CSV)
-export async function clearAllData(): Promise<void> {
-	await clearFiles();
-	const database = await initDB();
-	const transaction = database.transaction([CSV_STORE_NAME], 'readwrite');
-	const store = transaction.objectStore(CSV_STORE_NAME);
-	
-	return new Promise((resolve, reject) => {
-		const request = store.clear();
-		request.onsuccess = () => resolve();
 		request.onerror = () => reject(request.error);
 	});
 }
@@ -295,21 +291,21 @@ export async function clearAllData(): Promise<void> {
 // Load rendered video from IndexedDB
 export async function loadRenderedVideo(): Promise<RenderedVideo | undefined> {
 	const database = await initDB();
-	
+
 	// Check if the store exists
 	if (!database.objectStoreNames.contains(RENDERED_VIDEO_STORE_NAME)) {
 		return undefined;
 	}
-	
+
 	const transaction = database.transaction([RENDERED_VIDEO_STORE_NAME], 'readonly');
 	const store = transaction.objectStore(RENDERED_VIDEO_STORE_NAME);
-	
+
 	return new Promise((resolve, reject) => {
 		const request = store.getAll();
 		request.onsuccess = () => {
 			const results = request.result;
 			// Return the first video if any exist
-			resolve(results && results.length > 0 ? results[0] as RenderedVideo : undefined);
+			resolve(results && results.length > 0 ? (results[0] as RenderedVideo) : undefined);
 		};
 		request.onerror = () => reject(request.error);
 	});

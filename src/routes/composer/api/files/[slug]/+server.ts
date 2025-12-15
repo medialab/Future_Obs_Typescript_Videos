@@ -24,7 +24,6 @@ export const GET = async ({ params }: RequestEvent) => {
 			fileExists: existsSync(filepath)
 		});
 
-		// Security: ensure file is in tmp/uploads
 		if (!filepath.startsWith(TMP_VIDEOS_DIR) || !ASSET_EXT_RE.test(params.slug)) {
 			throw error(400, 'Invalid file');
 		}
