@@ -11,6 +11,7 @@
 	import type { RenderedVideo } from '$lib/stores';
 	import { uploadedVideoFiles, uploadedCsvFile, currentFrame } from '$lib/stores';
 	import Header from '$lib/components/header.svelte';
+	import { parseTimeToSeconds } from '$lib/utils';
 
 	import RemotionPlayer from '$lib/remotion/RemotionPlayer.svelte';
 
@@ -124,15 +125,27 @@
 											break;
 
 										case 'complete':
-											// Convert base64 to blob
-											const binaryString = atob(data.data.video);
-											const bytes = new Uint8Array(binaryString.length);
-											for (let i = 0; i < binaryString.length; i++) {
-												bytes[i] = binaryString.charCodeAt(i);
+											const downloadUrl = data.data.downloadUrl;
+
+											try {
+												const fileResponse = await fetch(downloadUrl);
+
+												if (!fileResponse.ok) {
+													reject(new Error(`Failed to download video: ${fileResponse.statusText}`));
+													return;
+												}
+
+												const blob = await fileResponse.blob();
+												resolve(blob);
+												return;
+											} catch (fetchError) {
+												reject(
+													new Error(
+														`Error downloading video: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`
+													)
+												);
+												return;
 											}
-											const blob = new Blob([bytes], { type: 'video/mp4' });
-											resolve(blob);
-											return;
 
 										case 'error':
 											reject(new Error(data.data.message));
@@ -170,19 +183,6 @@
 		})();
 	});
 
-	function parseTimeToSeconds(timeString: string): number {
-		// Format: HH:MM:SS:FF (hours:minutes:seconds:frames or hundredths)
-		const parts = timeString.split(':').map(Number);
-		if (parts.length !== 4) {
-			console.warn(`Invalid time format: ${timeString}`);
-			return 0;
-		}
-		const [hours, minutes, seconds, frames] = parts;
-
-		const totalSeconds = hours * 3600 + minutes * 60 + seconds + frames / 30;
-		return totalSeconds;
-	}
-
 	async function addDurationToVideos(videos: any[]): Promise<VideoData[]> {
 		return Promise.all(
 			videos.map(async (video) => {
@@ -191,7 +191,9 @@
 				return {
 					...video,
 					videoSrc,
-					duration
+					duration,
+					BeginTime: video.BeginTime,
+					EndTime: video.EndTime
 				};
 			})
 		);
@@ -203,12 +205,10 @@
 		renderStatus = 'Uploading videos...';
 		chipStatus = 'rendering';
 		try {
-			// Step 1: Upload videos to server and get back videos with server paths
 			renderStatus = 'Uploading videos to server...';
 			const videosWithServerPaths = await uploadVideosForRendering(videos);
 			console.log('Videos uploaded, server paths:', videosWithServerPaths);
 
-			// Step 1.5: Prepare render-specific props (absolute http URL + rendering flag)
 			const assetOrigin =
 				typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
 

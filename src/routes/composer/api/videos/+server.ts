@@ -4,13 +4,16 @@ import { getCompositions, renderMedia } from '@remotion/renderer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import type { VideoData } from '$lib/remotion/SingleVideoComp';
-import { mkdir, writeFile, rm } from 'fs/promises'; // Add 'rm' for cleanup
-import { unlink } from 'fs/promises'; // Add unlink for deleting individual files
+import { mkdir, writeFile, rm } from 'fs/promises';
+import { unlink } from 'fs/promises';
 import { error } from '@sveltejs/kit';
 import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const TMP_VIDEOS_DIR = path.join(process.cwd(), 'tmp/uploads');
+const RENDERED_VIDEOS_DIR = path.join(process.cwd(), 'tmp/renders');
 
 export async function POST({ request }: RequestEvent) {
 	process.env.REMOTION_RENDERING = 'true';
@@ -232,12 +235,22 @@ export async function POST({ request }: RequestEvent) {
 
 				sendMessage('status', { message: 'Starting render...', totalFrames: totalDurationFrames });
 
-				const result = await renderMedia({
+				await mkdir(RENDERED_VIDEOS_DIR, { recursive: true });
+				const renderedFilename = `rendered-${Date.now()}-${Math.random().toString(36).substring(7)}.mp4`;
+				const outputPath = path.join(RENDERED_VIDEOS_DIR, renderedFilename);
+
+				await renderMedia({
 					composition,
 					serveUrl: bundleLocation,
 					codec: 'h264',
-					outputLocation: null, // Render to buffer instead of file
+					concurrency: null,
+					videoBitrate: '2M',
+					audioBitrate: '128k',
+					audioCodec: 'aac',
+					outputLocation: outputPath,
 					inputProps: { segments: renderingVideos },
+					hardwareAcceleration: 'if-possible',
+					x264Preset: 'veryfast',
 					onProgress: ({ renderedFrames, encodedFrames }) => {
 						const renderedPercent = Math.round((renderedFrames / totalDurationFrames) * 100);
 						const encodedPercent = Math.round((encodedFrames / totalDurationFrames) * 100);
@@ -252,46 +265,51 @@ export async function POST({ request }: RequestEvent) {
 					}
 				});
 
-				const buffer = result.buffer;
+				const { stat } = await import('fs/promises');
 
-				if (!buffer) {
-					sendMessage('error', { message: 'No buffer returned' });
-					await cleanup(); // Clean up before closing
+				try {
+					const fileStats = await stat(outputPath);
+					const fileSizeMB = (fileStats.size / 1024 / 1024).toFixed(2);
+
+					console.log('Render complete, file saved:', outputPath, `(${fileSizeMB} MB)`);
+
+					sendMessage('status', {
+						message: 'Render complete!',
+						fileSize: fileStats.size,
+						fileSizeMB: fileSizeMB
+					});
+
+					sendMessage('complete', {
+						downloadUrl: `/composer/api/files/${renderedFilename}`,
+						filename: 'master-video.mp4'
+					});
+				} catch (fileError) {
+					sendMessage('error', {
+						message: `Render completed but file not found: ${outputPath}`
+					});
+					await cleanup();
 					closeController();
 					return;
 				}
 
-				console.log('Render complete, buffer size:', buffer.length / 1024 / 1024, 'MB');
-
-				sendMessage('status', { message: 'Render complete!', bufferSize: buffer.length });
-
-				// Send video as base64
-				const base64 = Buffer.from(buffer).toString('base64');
-				sendMessage('complete', {
-					video: base64,
-					filename: 'master-video.mp4'
-				});
-
-				// Clean up bundle directory after successful render
 				await cleanup();
 
 				closeController();
 			} catch (error) {
 				const errorMessage = error instanceof Error ? error.message : String(error);
-				// Remove verbose HTML response body from error messages
+
 				const cleanMessage = errorMessage.includes('The response body was:')
 					? errorMessage.split('The response body was:')[0].trim()
 					: errorMessage;
 
 				console.error('Error rendering video:', cleanMessage);
 				const errorStack = error instanceof Error ? error.stack : undefined;
+
 				if (errorStack) {
 					console.error('Stack:', errorStack);
 				}
-				sendMessage('error', { message: cleanMessage });
 
-				// Clean up even on error
-				//await cleanup();
+				sendMessage('error', { message: cleanMessage });
 
 				closeController();
 			}

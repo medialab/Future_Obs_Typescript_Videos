@@ -8,6 +8,7 @@ import { existsSync } from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TMP_VIDEOS_DIR = path.join(process.cwd(), 'tmp/uploads');
+const RENDERED_VIDEOS_DIR = path.join(process.cwd(), 'tmp/renders');
 const ASSET_EXT_RE = /\.(mp4|mov|mkv|avi)$/i;
 
 export const GET = async ({ params }: RequestEvent) => {
@@ -15,7 +16,21 @@ export const GET = async ({ params }: RequestEvent) => {
 		throw error(400, 'No slug provided');
 	}
 	try {
-		const filepath = path.join(TMP_VIDEOS_DIR, params.slug);
+		// Try rendered videos first, then uploads
+		let filepath = path.join(RENDERED_VIDEOS_DIR, params.slug);
+
+		if (!existsSync(filepath)) {
+			filepath = path.join(TMP_VIDEOS_DIR, params.slug);
+		}
+
+		// Security check - ensure file is in one of our allowed directories
+		if (!filepath.startsWith(TMP_VIDEOS_DIR) && !filepath.startsWith(RENDERED_VIDEOS_DIR)) {
+			throw error(400, 'Invalid file path');
+		}
+
+		if (!existsSync(filepath) || !ASSET_EXT_RE.test(params.slug)) {
+			throw error(404, 'File not found');
+		}
 
 		console.log('Files endpoint called:', {
 			slug: params.slug,
@@ -23,10 +38,6 @@ export const GET = async ({ params }: RequestEvent) => {
 			tmpDir: TMP_VIDEOS_DIR,
 			fileExists: existsSync(filepath)
 		});
-
-		if (!filepath.startsWith(TMP_VIDEOS_DIR) || !ASSET_EXT_RE.test(params.slug)) {
-			throw error(400, 'Invalid file');
-		}
 
 		const buffer = await readFile(filepath);
 		const fileStats = await stat(filepath);

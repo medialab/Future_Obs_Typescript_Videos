@@ -8,6 +8,7 @@
 	import arrowIcon from '$lib/assets/icons/arrow.svg';
 	import Papa from 'papaparse';
 	import InputFile from '$lib/components/inputFile.svelte';
+	import trashIcon from '$lib/assets/icons/delete.svg';
 	import {
 		csvVideoFilenames,
 		uploadedVideoFiles,
@@ -36,12 +37,17 @@
 		}
 	};
 
-	//$inspect('unknownFiles :', $unknownFiles);
+	$inspect('uploadedCsvFile :', $uploadedCsvFile);
 
 	const extractCsvData = async (csv: File): Promise<string[]> => {
 		csvData = await csv.text();
 		//console.log('csvData :', csvData);
-		return Papa.parse(csvData, { header: true }).data.map((row: any) => row.ClipName);
+
+		const outPut = Papa.parse(csvData, {
+			header: true,
+			transformHeader: (header: string) => header.toLowerCase()
+		}).data.map((row: any) => row.clipname);
+		return outPut;
 	};
 
 	const checkCrossFiles = async () => {
@@ -66,42 +72,83 @@
 		});
 	};
 
-	afterNavigate(async () => {
-		await checkCrossFiles();
-	});
+	const updateCsvFilenames = async (csvFile: File): Promise<string[]> => {
+		if (!csvFile) return [];
+		const names = await extractCsvData(csvFile);
+		return names.filter(Boolean);
+	};
 
+	//We reactively update the value of csvVideoFilenames
 	$effect(() => {
-		checkCrossFiles();
-	});
-
-	// Rehydrate CSV-derived data when IndexedDB-loaded file arrives after mount
-	$effect(() => {
-		const csvFile = $uploadedCsvFile;
-		if (!csvFile) return;
-		(async () => {
-			const names = await extractCsvData(csvFile);
-			csvVideoFilenames.set(names.filter(Boolean));
-			await checkCrossFiles();
-		})();
-	});
-
-	onMount(async () => {
-		if ($uploadedCsvFile) {
-			const names = await extractCsvData($uploadedCsvFile);
-			csvVideoFilenames.set(names.filter(Boolean));
-			await checkCrossFiles();
+		console.log('$effect triggered, uploadedCsvFile:', $uploadedCsvFile);
+		if (!$uploadedCsvFile) {
+			csvVideoFilenames.set([]);
+			return;
 		}
+
+		updateCsvFilenames($uploadedCsvFile)
+			.then((names) => {
+				console.log('updateCsvFilenames resolved with:', names);
+				csvVideoFilenames.set(names);
+				checkCrossFiles();
+			})
+			.catch((err) => {
+				console.error('Error updating CSV filenames:', err);
+			});
 	});
+
+	const isValidCsvFile = (file: File): boolean => {
+		const csvMimeTypes = ['text/csv', 'application/csv', 'text/comma-separated-values'];
+		const csvExtensions = ['.csv'];
+		const fileName = file.name.toLowerCase();
+
+		return (
+			csvMimeTypes.includes(file.type.toLowerCase()) ||
+			csvExtensions.some((ext) => fileName.endsWith(ext))
+		);
+	};
+
+	const isValidVideoFile = (file: File): boolean => {
+		const videoMimeTypes = [
+			'video/mp4',
+			'video/mpeg',
+			'video/quicktime',
+			'video/x-msvideo',
+			'video/x-matroska'
+		];
+		const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+		const fileName = file.name.toLowerCase();
+
+		return (
+			videoMimeTypes.includes(file.type.toLowerCase()) ||
+			videoExtensions.some((ext) => fileName.endsWith(ext))
+		);
+	};
 
 	const handleFiles = async (files: FileList | null, type: 'csv' | 'video') => {
 		if (!files?.length) return;
 
 		if (type === 'csv') {
-			$uploadedCsvFile = files[0];
+			// Filter to only CSV files and take the first one
+			const csvFiles = Array.from(files).filter(isValidCsvFile);
+
+			if (csvFiles.length === 0) {
+				console.warn('No valid CSV files found in dropped files');
+				return;
+			}
+
+			$uploadedCsvFile = csvFiles[0];
 			csvVideoFilenames.set(await extractCsvData($uploadedCsvFile));
 		} else {
-			const incoming = Array.from(files);
-			const merged = [...$uploadedVideoFiles, ...incoming];
+			// Filter to only video files
+			const videoFiles = Array.from(files).filter(isValidVideoFile);
+
+			if (videoFiles.length === 0) {
+				console.warn('No valid video files found in dropped files');
+				return;
+			}
+
+			const merged = [...$uploadedVideoFiles, ...videoFiles];
 			// keep unique by name to avoid duplicates from re-selecting same file
 			const seen = new Set<string>();
 			$uploadedVideoFiles = merged.filter((file) => {
@@ -111,6 +158,9 @@
 			});
 		}
 	};
+
+	$inspect('csvVideoFilenames :', $csvVideoFilenames);
+	$inspect('uploadedCsvFile :', $uploadedCsvFile);
 </script>
 
 <Header type="home" />
@@ -132,11 +182,11 @@
 			<label for="upload_input" class="flex v centered minigap upload_label">
 				<img src={icon} alt="icon" />
 				<p class="title">
-					{#if type === 'csv'}
+					{#if type === 'csv' && $uploadedCsvFile === undefined}
 						{'Upload your CSV here'}
-					{:else if $uploadedCsvFile}
+					{:else if type === 'csv' && $uploadedCsvFile !== undefined}
 						{$uploadedCsvFile?.name}
-					{:else}
+					{:else if type === 'video'}
 						Drop your Videos here
 					{/if}
 				</p>
@@ -149,15 +199,27 @@
 					In batch, or single files
 				{/if}
 			</label>
-			<input
-				type="file"
-				accept={type === 'csv' ? 'csv/*' : 'video/*'}
-				multiple={type === 'csv' ? false : true}
-				id="upload_input {type === 'csv' ? 'CSV' : 'Video'}"
-				class="upload_input"
-				aria-label="Upload CSV files"
-				onchange={(e) => handleFiles((e.target as HTMLInputElement).files, type)}
-			/>
+			{#if type === 'csv'}
+				<input
+					type="file"
+					accept=".csv, .xslx"
+					multiple={false}
+					id="csv_input"
+					class="upload_input"
+					aria-label="Upload CSV files"
+					onchange={(e) => handleFiles((e.target as HTMLInputElement).files, type)}
+				/>
+			{:else if type === 'video'}
+				<input
+					type="file"
+					accept=".mp4,.mov,.avi,.mkv,.webm,.wmv,.flv,.mpeg,.mpg,.m4v,.3gp,.3g2"
+					multiple={true}
+					id="video_input"
+					class="upload_input"
+					aria-label="Upload Video files"
+					onchange={(e) => handleFiles((e.target as HTMLInputElement).files, type)}
+				/>
+			{/if}
 		</div>
 
 		{#if files}
@@ -167,9 +229,17 @@
 				{/each}
 			</div>
 		{/if}
-		{#if type === 'csv' && $uploadedCsvFile}
-			<button class="erase_csv flex centered" onclick={($uploadedCsvFile = undefined)}>
-				<img src={eraseIcon} alt="erase" />
+		{#if type === 'csv' && $uploadedCsvFile !== undefined}
+			<button
+				class="erase_csv warning flex centered"
+				onclick={() => {
+					$uploadedCsvFile = undefined; //reset uploadedCsvFile
+					$csvVideoFilenames = []; //reset csvVideoFilenames
+					$missingFilenames = []; //reset missingFilenames
+					$unknownFiles = []; //reset unknownFiles
+				}}
+			>
+				<img src={trashIcon} alt="erase" />
 			</button>
 		{/if}
 	</div>
@@ -282,7 +352,7 @@
 			<button
 				class="flex h minigap success centered"
 				class:disabled={$missingFilenames.length !== 0 ||
-					$uploadedCsvFile === null ||
+					!$uploadedCsvFile ||
 					$uploadedVideoFiles.length === 0}
 			>
 				<a href="/composer">

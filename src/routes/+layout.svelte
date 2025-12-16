@@ -72,22 +72,22 @@
 	}
 
 	:global(.pending) {
-		background-color: #F2F2F2;
-		border: 1px solid #D6D6D6;
+		background-color: #f2f2f2;
+		border: 1px solid #d6d6d6;
 	}
 
 	:global(.warning) {
-        background-color: #FFF4DD;
-        border: 1px solid #dc9600;
-    }
-    :global(.error) {
-        background-color: #FFF0F0;
-        border: 1px solid #F90000;
-    }
-    :global(.success) {
-        background-color: #E9FFE7 !important;
-        border: 1px solid #0b8400 !important;
-    }
+		background-color: #fff4dd;
+		border: 1px solid #dc9600;
+	}
+	:global(.error) {
+		background-color: #fff0f0;
+		border: 1px solid #f90000;
+	}
+	:global(.success) {
+		background-color: #e9ffe7 !important;
+		border: 1px solid #0b8400 !important;
+	}
 
 	:global(a) {
 		text-decoration: none;
@@ -105,11 +105,11 @@
 		white-space: nowrap;
 		text-align: center;
 		width: fit-content;
-		border: solid 1px #D6D6D6;
+		border: solid 1px #d6d6d6;
 		border-radius: 10px;
 		padding: 5px 10px;
 		cursor: pointer;
-		background-color: #F2F2F2;
+		background-color: #f2f2f2;
 		pointer-events: visible;
 		transition: all 0.3s ease-in-out;
 	}
@@ -134,6 +134,7 @@
 		height: 100%;
 		width: 100%;
 		margin-top: 100px;
+		overflow: visible;
 	}
 
 	:global(.main_grid :nth-child(1)),
@@ -152,13 +153,13 @@
 	}
 
 	:global(.trash_btn) {
-			width: 25px;
-			height: 25px;
-			cursor: pointer;
-			pointer-events: all;
-            border: none;
-			background-color: transparent;
-		}
+		width: 25px;
+		height: 25px;
+		cursor: pointer;
+		pointer-events: all;
+		border: none;
+		background-color: transparent;
+	}
 
 	:global(.trash_btn:hover > img) {
 		transform: scale(1.1) rotate(2deg);

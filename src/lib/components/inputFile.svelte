@@ -5,7 +5,6 @@
 	import pendingIcon from '$lib/assets/icons/pending.svg';
 	import { clearFile } from '$lib/fileStorage';
 	import { csvVideoFilenames, uploadedVideoFiles, unknownFiles } from '$lib/stores';
-	import { afterNavigate } from '$app/navigation';
 	import { untrack } from 'svelte';
 
 	let props = $props<{ file: Blob }>();
@@ -13,9 +12,10 @@
 	let status = $state<'pending' | 'correct' | 'incorrect'>('pending');
 
 	const getFileStatus = async (fileName: string, csvVideoFilenames: string[]) => {
+		//console.log('getting file status for', fileName);
 		if (!fileName) return 'pending';
 
-		if (csvVideoFilenames && csvVideoFilenames.length > 0) {
+		if (csvVideoFilenames.length > 0) {
 			const cleanFilename = fileName.replace('.mp4', '').replace('.mov', '');
 
 			// defensively handle unexpected non-string entries
@@ -56,16 +56,16 @@
 		}
 	};
 
-	afterNavigate(async () => {
-		getFileStatus(props.file.name, $csvVideoFilenames).then((newStatus) => {
-			status = newStatus;
-		});
-	});
-
 	$effect(() => {
-		getFileStatus(props.file.name, $csvVideoFilenames).then((newStatus) => {
-			status = newStatus;
-		});
+		if ($csvVideoFilenames.length === 0) {
+			console.log('csvVideoFilenames is empty, setting status to pending');
+			status = 'pending';
+			return;
+		} else {
+			getFileStatus(props.file.name, $csvVideoFilenames).then((newStatus) => {
+				status = newStatus;
+			});
+		}
 	});
 </script>
 

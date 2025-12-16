@@ -1,5 +1,6 @@
 import { AbsoluteFill, Img, Sequence, OffthreadVideo, staticFile } from 'remotion';
 import React from 'react';
+import { parseTimeToSeconds } from '$lib/utils';
 
 export type VideoData = {
 	Title?: string;
@@ -15,21 +16,29 @@ export type VideoData = {
 	videoSrcPath?: string;
 	renderSrc?: string;
 	isRendering?: boolean;
+	BeginTime?: string;
+	EndTime?: string;
 };
 
 export const SingleVideoComp: React.FC<{
 	data: VideoData;
-	videoSrc: string;
+	videoSrc?: string;
 	duration: number;
 	isRendering?: boolean;
 }> = ({ data, videoSrc, duration, isRendering }) => {
-	const canvasWidth = 1920;
 	const canvasHeight = 1080;
 	const videoWidth = 1200;
 	const videoHeight = videoWidth * (9 / 16) + 25;
 	const videoTopOffset = 20;
 
-	const clipDurationFrames = Math.ceil(duration * 30);
+	const beginTimeSeconds = data.BeginTime ? parseTimeToSeconds(data.BeginTime) : 0;
+	const endTimeSeconds = data.EndTime ? parseTimeToSeconds(data.EndTime) : 0;
+
+	const trimmedDuration = endTimeSeconds - beginTimeSeconds;
+	const trimmedDurationFrames = Math.ceil(trimmedDuration * 30);
+
+	const clipDurationFrames =
+		trimmedDurationFrames > 0 ? trimmedDurationFrames : Math.ceil(duration * 30);
 
 	if (!data) {
 		return null;
@@ -42,14 +51,25 @@ export const SingleVideoComp: React.FC<{
 			: Boolean(isRendering || data.isRendering);
 
 	if (renderMode) {
-		staticVideoSrc = data.renderSrc || videoSrc;
+		staticVideoSrc = data.renderSrc || videoSrc || data.videoSrc || '';
 	} else {
-		staticVideoSrc =
-			videoSrc.startsWith('blob:') || videoSrc.startsWith('http')
-				? videoSrc
-				: videoSrc.startsWith('/')
-					? videoSrc
-					: `/${videoSrc}`;
+		const sourceVideoSrc = videoSrc || data.videoSrc;
+		if (!sourceVideoSrc) {
+			console.warn('No video source available in SingleVideoComp', { videoSrc, data });
+			staticVideoSrc = '';
+		} else {
+			staticVideoSrc =
+				sourceVideoSrc.startsWith('blob:') || sourceVideoSrc.startsWith('http')
+					? sourceVideoSrc
+					: sourceVideoSrc.startsWith('/')
+						? sourceVideoSrc
+						: `/${sourceVideoSrc}`;
+		}
+	}
+
+	if (!staticVideoSrc) {
+		console.error('No valid video source found for SingleVideoComp');
+		return null;
 	}
 
 	const commentsArray = (data.Comments || '§ Comment manquant')
@@ -82,6 +102,8 @@ export const SingleVideoComp: React.FC<{
 			>
 				<OffthreadVideo
 					src={staticVideoSrc}
+					trimBefore={beginTimeSeconds * 30}
+					trimAfter={endTimeSeconds * 30}
 					style={{ width: '100%', height: '100%', objectFit: 'cover' }}
 					muted={false}
 				/>

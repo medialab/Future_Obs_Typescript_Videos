@@ -15,9 +15,7 @@ export let uploadedCsvFile = writable<File | undefined>(undefined);
 export let unknownFiles = writable<string[]>([]);
 export let currentFrame = writable<number>(0);
 
-// Sync stores with IndexedDB on browser
 if (browser) {
-	// Load files from IndexedDB on initialization
 	loadFiles()
 		.then((files) => {
 			if (files.length > 0) {
@@ -38,7 +36,6 @@ if (browser) {
 			console.error('Error loading CSV from IndexedDB:', err);
 		});
 
-	// Auto-save when files change
 	uploadedVideoFiles.subscribe((files) => {
 		saveFiles(files).catch((err) => {
 			console.error('Error saving files to IndexedDB:', err);

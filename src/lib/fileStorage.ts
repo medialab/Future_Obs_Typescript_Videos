@@ -192,7 +192,6 @@ export async function saveFiles(files: File[]): Promise<void> {
 	await Promise.all(savePromises);
 }
 
-// Load all File objects from IndexedDB
 export async function loadFiles(): Promise<File[]> {
 	const database = await initDB();
 	const transaction = database.transaction([STORE_NAME], 'readonly');

@@ -26,7 +26,6 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
 	loop = false,
 	autoPlay = false
 }) => {
-	// Calculate duration in frames (30 fps)
 	const durationInFrames = Math.ceil(duration * 30);
 
 	return (
@@ -42,7 +41,6 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
 			inputProps={{
 				data: videoData,
 				videoSrc,
-				bgImg,
 				duration
 			}}
 			style={{

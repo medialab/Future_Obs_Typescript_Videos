@@ -60,3 +60,16 @@ export async function triggerBlobDownload(blob: Blob, filename: string) {
 	document.body.removeChild(anchor);
 	setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
 }
+
+export function parseTimeToSeconds(timeString: string): number {
+	// Format: HH:MM:SS (hours:minutes:seconds)
+	const parts = timeString.split(':').map(Number);
+	if (parts.length !== 3) {
+		console.warn(`Invalid time format: ${timeString}. Expected HH:MM:SS`);
+		return 0;
+	}
+	const [hours, minutes, seconds] = parts;
+
+	const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+	return totalSeconds;
+}

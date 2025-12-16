@@ -103,41 +103,6 @@
 			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
 			console.log('current frame is ' + $currentFrame);
 		}}
-		onpointermove={(e) => {
-			e.stopPropagation();
-			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
-			console.log('current frame is ' + $currentFrame);
-		}}
-		onpointerleave={(e) => {
-			e.stopPropagation();
-			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
-			console.log('current frame is ' + $currentFrame);
-		}}
-		onmousedown={(e) => {
-			e.stopPropagation();
-			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
-			console.log('current frame is ' + $currentFrame);
-		}}
-		onmousemove={(e) => {
-			e.stopPropagation();
-			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
-			console.log('current frame is ' + $currentFrame);
-		}}
-		onmouseleave={(e) => {
-			e.stopPropagation();
-			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
-			console.log('current frame is ' + $currentFrame);
-		}}
-		ontouchstart={(e) => {
-			e.stopPropagation();
-			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
-			console.log('current frame is ' + $currentFrame);
-		}}
-		ontouchmove={(e) => {
-			e.stopPropagation();
-			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
-			console.log('current frame is ' + $currentFrame);
-		}}
 	></div>
 {:else}
 	<div class="remotion-player loading">Loading video segments...</div>
