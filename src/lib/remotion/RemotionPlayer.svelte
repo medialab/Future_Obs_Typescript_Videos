@@ -1,16 +1,15 @@
 <script lang="ts">
-import { onMount, onDestroy } from 'svelte';
-import { createRoot, type Root } from 'react-dom/client';
-import { Player, type PlayerRef } from '@remotion/player';
+	import { onMount, onDestroy } from 'svelte';
+	import { createRoot, type Root } from 'react-dom/client';
+	import { Player, type PlayerRef } from '@remotion/player';
 	import { MasterComposition as MasterCompositionComponent } from '$lib/remotion/MasterComp';
 	import type { VideoData } from '$lib/remotion/SingleVideoComp';
-import React from 'react';
-import { currentFrame } from '$lib/stores';
+	import React from 'react';
+	import { currentFrame } from '$lib/stores';
 
 	let container: HTMLDivElement | null = $state(null);
 	let root: Root | null = null;
 	const playerRef = React.createRef<PlayerRef>();
-	
 
 	let props = $props<{
 		segments: VideoData[];
@@ -50,7 +49,7 @@ import { currentFrame } from '$lib/stores';
 					component: MasterCompositionComponent as any,
 					durationInFrames: totalDurationInFrames as number,
 					compositionWidth: 1920,
-					compositionHeight: 1080,	
+					compositionHeight: 1080,
 					fps: 30,
 					controls: props.controls,
 					clickToPlay: false,
@@ -81,7 +80,7 @@ import { currentFrame } from '$lib/stores';
 				});
 			}
 		}
-	})
+	});
 
 	onDestroy(() => {
 		if (root) {
@@ -91,22 +90,55 @@ import { currentFrame } from '$lib/stores';
 </script>
 
 {#if isReady}
-	<div class="remotion-player" bind:this={container}
-	onpointerdown={(e) => {
-		e.stopPropagation();
-		$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
-		console.log('current frame is ' + $currentFrame);
-	}}
-	onpointermove={(e) => {
-		e.stopPropagation();
-		$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
-		console.log('current frame is ' + $currentFrame);
-	}}
-	onpointerleave={(e) => {
-		e.stopPropagation();
-		$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
-		console.log('current frame is ' + $currentFrame);
-	}}></div>
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+	<div
+		class="remotion-player"
+		bind:this={container}
+		role="application"
+		aria-label="Video player"
+		tabindex="0"
+		onpointerdown={(e) => {
+			e.stopPropagation();
+			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
+			console.log('current frame is ' + $currentFrame);
+		}}
+		onpointermove={(e) => {
+			e.stopPropagation();
+			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
+			console.log('current frame is ' + $currentFrame);
+		}}
+		onpointerleave={(e) => {
+			e.stopPropagation();
+			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
+			console.log('current frame is ' + $currentFrame);
+		}}
+		onmousedown={(e) => {
+			e.stopPropagation();
+			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
+			console.log('current frame is ' + $currentFrame);
+		}}
+		onmousemove={(e) => {
+			e.stopPropagation();
+			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
+			console.log('current frame is ' + $currentFrame);
+		}}
+		onmouseleave={(e) => {
+			e.stopPropagation();
+			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
+			console.log('current frame is ' + $currentFrame);
+		}}
+		ontouchstart={(e) => {
+			e.stopPropagation();
+			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
+			console.log('current frame is ' + $currentFrame);
+		}}
+		ontouchmove={(e) => {
+			e.stopPropagation();
+			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
+			console.log('current frame is ' + $currentFrame);
+		}}
+	></div>
 {:else}
 	<div class="remotion-player loading">Loading video segments...</div>
 {/if}
@@ -114,12 +146,31 @@ import { currentFrame } from '$lib/stores';
 <style>
 	.remotion-player {
 		width: 100%;
-		aspect-ratio: 16/9;
-		height: auto;
+		position: relative;
 		z-index: 2;
-		border: 1px dashed #C6C6C6;
+		border: 1px dashed #c6c6c6;
 		overflow: hidden;
 		border-radius: 17px;
 		background-color: white;
+		/* Modern browsers with aspect-ratio support */
+		aspect-ratio: 16/9;
+		height: auto;
+	}
+
+	/* Fallback for browsers that don't support aspect-ratio (Safari < 15.4) */
+	@supports not (aspect-ratio: 16/9) {
+		.remotion-player {
+			height: 0;
+			padding-bottom: 56.25%; /* 16/9 = 0.5625 */
+		}
+
+		/* svelte-ignore css_unused_selector - Used conditionally in @supports block */
+		.remotion-player > * {
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+		}
 	}
 </style>

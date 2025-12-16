@@ -40,13 +40,13 @@
 		const formData = new FormData();
 
 		formData.append('videos', JSON.stringify(videos));
-		
+
 		// Collect all matching files
 		for (const video of videos) {
 			const clipName = (video as any).ClipName?.trim();
 			if (clipName) {
-				const matchingFile = $uploadedVideoFiles.find(f => 
-					f.name.replace(/\.(mp4|mov|avi|mkv)$/i, '') === clipName
+				const matchingFile = $uploadedVideoFiles.find(
+					(f) => f.name.replace(/\.(mp4|mov|avi|mkv)$/i, '') === clipName
 				);
 				if (matchingFile) {
 					formData.append('files', matchingFile);
@@ -55,17 +55,17 @@
 				}
 			}
 		}
-		
+
 		const response = await fetch('/composer/api/upload', {
 			method: 'POST',
 			body: formData
 		});
-		
+
 		if (!response.ok) {
 			const errorText = await response.text();
 			throw new Error(`Failed to upload videos: ${response.statusText} - ${errorText}`);
 		}
-		
+
 		const { videos: updatedVideos } = await response.json();
 		console.log('Uploaded videos:', videos);
 		return updatedVideos as RenderVideoData[];
@@ -73,7 +73,7 @@
 
 	async function generateVideo(videos: RenderVideoData[]) {
 		return new Promise<Blob>((resolve, reject) => {
-			fetch('/composer/api/videos', { 
+			fetch('/composer/api/videos', {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json'
@@ -154,7 +154,7 @@
 
 	$effect(() => {
 		if (!browser) return;
-		
+
 		if (!$uploadedCsvFile || !$uploadedVideoFiles || $uploadedVideoFiles.length === 0) {
 			return;
 		}
@@ -199,7 +199,7 @@
 
 	async function renderAllVideos() {
 		isRendering = true;
-		renderedVideo.set([{filename: '', blob: undefined}]);
+		renderedVideo.set([{ filename: '', blob: undefined }]);
 		renderStatus = 'Uploading videos...';
 		chipStatus = 'rendering';
 		try {
@@ -207,7 +207,7 @@
 			renderStatus = 'Uploading videos to server...';
 			const videosWithServerPaths = await uploadVideosForRendering(videos);
 			console.log('Videos uploaded, server paths:', videosWithServerPaths);
-			
+
 			// Step 1.5: Prepare render-specific props (absolute http URL + rendering flag)
 			const assetOrigin =
 				typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
@@ -230,7 +230,7 @@
 			renderStatus = 'Starting render...';
 			const filename = `master-video.mp4`;
 			const blob = await generateVideo(renderReadyVideos);
-			
+
 			renderedVideo.set([{ filename, blob }]);
 			renderStatus = `Completed ${currentScene}/${videos.length}`;
 			chipStatus = 'success';
@@ -242,7 +242,6 @@
 			} catch (error) {
 				console.error('Error storing rendered video:', error);
 			}
-
 		} catch (error) {
 			console.error(`Error rendering videos:`, error);
 			renderStatus = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
@@ -260,7 +259,7 @@
 			console.error('ERROR: Filename is empty!');
 			return;
 		}
-		
+
 		await triggerBlobDownload(video.blob, video.filename);
 	}
 
@@ -285,36 +284,38 @@
 <Header type="composer" />
 
 {#snippet timelinePill(video?: VideoData, index: number = 0)}
-{@const fps = 30}
-{@const startFrame = videos.slice(0, index).reduce((sum, v) => sum + (v.duration || 0) * fps, 0)}
-{@const endFrame = startFrame + (video?.duration || 0) * fps}
-{@const isActive = $currentFrame >= startFrame && $currentFrame < endFrame}
-<button
-class="container flex v minigap centered"
-class:success={isActive}
-style="width: {video?.duration ? (video.duration / totalDuration * 100) + '%' : '0px'};"
-onclick={() => {
-	$currentFrame = startFrame + 1; //The one is perceptual for the first segment
-}}>
-<p class="microtitle pilltext">{(video as any)?.ClipName || 'Video_1.mp4'}</p></button>
+	{@const fps = 30}
+	{@const startFrame = videos.slice(0, index).reduce((sum, v) => sum + (v.duration || 0) * fps, 0)}
+	{@const endFrame = startFrame + (video?.duration || 0) * fps}
+	{@const isActive = $currentFrame >= startFrame && $currentFrame < endFrame}
+	<button
+		class="container flex v minigap centered"
+		class:success={isActive}
+		style="width: {video?.duration ? (video.duration / totalDuration) * 100 + '%' : '0px'};"
+		onclick={() => {
+			$currentFrame = startFrame + 1; //The one is perceptual for the first segment
+		}}
+	>
+		<p class="microtitle pilltext">{(video as any)?.ClipName || 'Video_1.mp4'}</p></button
+	>
 
-<style>
-	.container {
-		height: fit-content;
-		width: 100%;
-		border-radius: 50px;
-		border: 1px solid #6B74C4;
-		background-color: #C6CCFF;
-		transition: background-color 0.2s ease;
-	}
+	<style>
+		.container {
+			height: fit-content;
+			width: 100%;
+			border-radius: 50px;
+			border: 1px solid #6b74c4;
+			background-color: #c6ccff;
+			transition: background-color 0.2s ease;
+		}
 
-	.pilltext {
-		overflow-x: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		width: 100%;
-	}
-</style>
+		.pilltext {
+			overflow-x: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+			width: 100%;
+		}
+	</style>
 {/snippet}
 
 <section class="main_grid">
@@ -356,12 +357,10 @@ onclick={() => {
 	</div>
 	<div class="player_console flex v" id="remotion_player_container">
 		<div class="flex h spacebetween" style="padding: 0 5px;">
-			<p class="annotation">
-				EOLIEN_YTB_22.MP4
-			</p>
+			<p class="annotation">EOLIEN_YTB_22.MP4</p>
 		</div>
 		{#key videos && $uploadedVideoFiles && $uploadedCsvFile}
-			<RemotionPlayer segments={videos} controls={true} loop={false} autoPlay={false}/>
+			<RemotionPlayer segments={videos} controls={true} loop={false} autoPlay={false} />
 		{/key}
 		<div class="timeline flex h minigap">
 			{#each videos as v, index}
@@ -372,51 +371,90 @@ onclick={() => {
 	<div class="flex v mediumgap" id="alert_container" style="overflow: hidden;">
 		<p class="title">Render status</p>
 		<div class="flex v minigap">
-			{@render renderChip(chipStatus, $renderedVideo[0].filename, $renderedVideo[0].blob?.size || 0)}
+			{@render renderChip(
+				chipStatus,
+				$renderedVideo[0].filename,
+				$renderedVideo[0].blob?.size || 0
+			)}
 		</div>
 	</div>
 </section>
 
-{#snippet renderChip(state: 'pending' | 'rendering' | 'success' | 'error' = 'pending', filename: string, size: number)}
-
-<div class="chip_father flex v minigap centered">
-	{#if state !== 'pending'}
-	<div class="absolute_dot"
-		class:warning={state === 'rendering'}
-		class:success={state === 'success'}
-		class:error={state === 'error'}></div>
-	{/if}
-	<div class="chip flex h centered mediumgap">
-		<button class="chip_img flex centered"
-				onclick={state === 'pending' ? () => {renderAllVideos()} : state === 'success' ? () => {downloadRenderedVideo($renderedVideo[0])} : () => {}}
+{#snippet renderChip(
+	state: 'pending' | 'rendering' | 'success' | 'error' = 'pending',
+	filename: string,
+	size: number
+)}
+	<div class="chip_father flex v minigap centered">
+		{#if state !== 'pending'}
+			<div
+				class="absolute_dot"
+				class:warning={state === 'rendering'}
+				class:success={state === 'success'}
+				class:error={state === 'error'}
+			></div>
+		{/if}
+		<div class="chip flex h centered mediumgap">
+			<button
+				class="chip_img flex centered"
+				onclick={state === 'pending'
+					? () => {
+							renderAllVideos();
+						}
+					: state === 'success'
+						? () => {
+								downloadRenderedVideo($renderedVideo[0]);
+							}
+						: () => {}}
 				class:pending={state === 'pending'}
 				class:warning={state === 'rendering'}
 				class:success={state === 'success'}
 				class:error={state === 'error'}
 			>
-			<img src={state === 'pending' ? pendingIcon : state === 'rendering' ? renderingIcon : state === 'success' ? successIcon : errorIcon} alt={state}/>
-		</button>
+				<img
+					src={state === 'pending'
+						? pendingIcon
+						: state === 'rendering'
+							? renderingIcon
+							: state === 'success'
+								? successIcon
+								: errorIcon}
+					alt={state}
+				/>
+			</button>
 
-		<div class="flex v minigap">
-			<p class="annotation">{filename || 'Your render video name'}</p>
-			<p class="microtitle">{size + ' MB' || '0 MB For now'}</p>
-		</div>
+			<div class="flex v minigap">
+				<p class="annotation">{filename || 'Your render video name'}</p>
+				<p class="microtitle">{size + ' MB' || '0 MB For now'}</p>
+			</div>
 
 			{#if state === 'success'}
-				
-				<button class="trash_btn flex centered" onclick={async () => await clearFile(filename).then(() => {chipStatus = 'pending'; renderProgress = 0})}>
+				<button
+					class="trash_btn flex centered"
+					onclick={async () =>
+						await clearFile(filename).then(() => {
+							chipStatus = 'pending';
+							renderProgress = 0;
+						})}
+				>
 					<img src={trashIcon} alt="trash" />
 				</button>
 			{/if}
+		</div>
+		<progress
+			id="render-progress"
+			class="render_progress"
+			class:success={state === 'success'}
+			value={renderProgress}
+			max="100"
+		></progress>
 	</div>
-	<progress id="render-progress" class="render_progress" class:success={state === 'success'} value={renderProgress} max="100"></progress>
-</div>
 	<style>
 		.chip {
 			width: fit-content;
 			height: fit-content;
-			border: 1px solid #D6D6D6;
-			background-color: #FFF;
+			border: 1px solid #d6d6d6;
+			background-color: #fff;
 			padding: 5px 5px 5px 5px;
 			border-radius: 15px;
 			position: relative;
@@ -444,35 +482,52 @@ onclick={() => {
 			width: 95%;
 			height: 10px;
 			border-radius: 50px;
-			background-color: #F2F2;
-			border: 1px solid #D6D6D6;
+			background-color: #f2f2f2;
+			border: 1px solid #d6d6d6;
 			overflow: hidden;
+			/* Reset default browser styling */
+			-webkit-appearance: none;
+			-moz-appearance: none;
+			appearance: none;
 		}
 
-		.render_progress.success::-webkit-progress-value {
-			background-color: #0b8400;
-		}
-
+		/* Chrome/Safari/Edge progress bar background */
 		.render_progress::-webkit-progress-bar {
-			background-color: #F2F2F2;
+			background-color: #f2f2f2;
 			border-radius: 50px;
 		}
 
+		/* Chrome/Safari/Edge progress bar value */
 		.render_progress::-webkit-progress-value {
 			background-color: #dc9600;
 			border-radius: 50px;
 			transition: width 0.3s ease;
 		}
 
+		.render_progress.success::-webkit-progress-value {
+			background-color: #0b8400;
+		}
+
+		/* Firefox progress bar */
 		.render_progress::-moz-progress-bar {
 			background-color: #dc9600;
 			border-radius: 50px;
 		}
 
+		.render_progress.success::-moz-progress-bar {
+			background-color: #0b8400;
+		}
+
+		/* Standard progress bar (for browsers that support it) */
+		.render_progress[value] {
+			/* Fallback for browsers without vendor prefixes */
+			background-color: #f2f2f2;
+		}
+
 		.chip_img {
 			width: 44px;
 			height: 44px;
-			border-radius: 10px ;
+			border-radius: 10px;
 		}
 
 		.chip_img > img {
@@ -482,7 +537,7 @@ onclick={() => {
 			object-position: center;
 			overflow: visible;
 		}
-		
+
 		.chip_img.warning > img {
 			animation: rotate 2s infinite;
 		}
@@ -502,13 +557,13 @@ onclick={() => {
 	:global(body) {
 		background-color: white;
 	}
-	
+
 	.player_console {
 		width: 100%;
 		height: fit-content;
-		background-color: #F2F2F2;
+		background-color: #f2f2f2;
 		border-radius: 30px;
-		border: 1px solid #D6D6D6;
+		border: 1px solid #d6d6d6;
 		padding: 20px 15px;
 	}
 
@@ -516,8 +571,8 @@ onclick={() => {
 		width: 100%;
 		height: fit-content;
 		border-radius: 17px;
-		background-color: #FFFFFF;
-		border: 1px solid #D6D6D6;
+		background-color: #ffffff;
+		border: 1px solid #d6d6d6;
 		padding: 5px;
 		overflow: hidden;
 	}

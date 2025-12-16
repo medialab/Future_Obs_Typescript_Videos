@@ -132,12 +132,15 @@
 			<label for="upload_input" class="flex v centered minigap upload_label">
 				<img src={icon} alt="icon" />
 				<p class="title">
-					{#if type === 'csv' && $uploadedCsvFile}
-						{$uploadedCsvFile?.name || 'Upload your CSV here'}
+					{#if type === 'csv'}
+						{'Upload your CSV here'}
+					{:else if $uploadedCsvFile}
+						{$uploadedCsvFile?.name}
 					{:else}
 						Drop your Videos here
 					{/if}
 				</p>
+
 				{#if type === 'csv' && $uploadedCsvFile}
 					{Math.ceil($uploadedCsvFile?.size / 1024) + ' KB' || 'Max 500 MB'}
 				{:else if type === 'video' && $uploadedVideoFiles.length > 0}
@@ -156,12 +159,18 @@
 				onchange={(e) => handleFiles((e.target as HTMLInputElement).files, type)}
 			/>
 		</div>
+
 		{#if files}
 			<div class="uploaded_files_container flex r minigap">
 				{#each $uploadedVideoFiles as file}
 					<InputFile {file} />
 				{/each}
 			</div>
+		{/if}
+		{#if type === 'csv' && $uploadedCsvFile}
+			<button class="erase_csv flex centered" onclick={($uploadedCsvFile = undefined)}>
+				<img src={eraseIcon} alt="erase" />
+			</button>
 		{/if}
 	</div>
 
@@ -174,6 +183,19 @@
 			height: fit-content;
 			border: 1px solid #d6d6d6;
 			transition: all 0.3s ease-in-out;
+			position: relative;
+		}
+
+		.erase_csv {
+			position: absolute;
+			top: 50%;
+			transform: translateY(-50%);
+			right: -2%;
+		}
+
+		.erase_csv:hover {
+			transform: translateY(-50%) scale(1.1) rotate(2deg);
+			transition: transform 0.3s ease-in-out;
 		}
 
 		.upload_greyzone:hover {
@@ -203,6 +225,12 @@
 
 		.upload_input {
 			position: absolute;
+			/* Fallback for browsers that don't support inset (Safari < 14.1) */
+			top: 0;
+			right: 0;
+			bottom: 0;
+			left: 0;
+			/* Modern browsers with inset support */
 			inset: 0;
 			width: 100%;
 			height: 100%;

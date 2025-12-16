@@ -138,10 +138,15 @@ export const SingleVideoComp: React.FC<{
 						width: '90%',
 						maxWidth: '80ch',
 						whiteSpace: 'wrap',
+						// Cross-browser line clamping
 						display: '-webkit-box',
+						WebkitLineClamp: 2,
+						WebkitBoxOrient: 'vertical' as const,
 						lineClamp: 2,
 						overflow: 'hidden',
-						textOverflow: 'ellipsis'
+						textOverflow: 'ellipsis',
+						// Fallback for older browsers
+						maxHeight: '2.4em'
 					}}
 				>
 					{data.Title}
