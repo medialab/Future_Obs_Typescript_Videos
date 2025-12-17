@@ -7,6 +7,7 @@
 	import eraseIcon from '$lib/assets/icons/erase.svg';
 	import arrowIcon from '$lib/assets/icons/arrow.svg';
 	import Papa from 'papaparse';
+	import * as XLSX from 'xlsx';
 	import InputFile from '$lib/components/inputFile.svelte';
 	import trashIcon from '$lib/assets/icons/delete.svg';
 	import {
@@ -39,15 +40,41 @@
 
 	$inspect('uploadedCsvFile :', $uploadedCsvFile);
 
-	const extractCsvData = async (csv: File): Promise<string[]> => {
-		csvData = await csv.text();
-		//console.log('csvData :', csvData);
+	const extractCsvData = async (file: File): Promise<string[]> => {
+		const fileName = file.name.toLowerCase();
+		const isXlsx = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
 
-		const outPut = Papa.parse(csvData, {
-			header: true,
-			transformHeader: (header: string) => header.toLowerCase()
-		}).data.map((row: any) => row.clipname);
-		return outPut;
+		if (isXlsx) {
+			// Handle XLSX
+			const arrayBuffer = await file.arrayBuffer();
+			const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+			const firstSheetName = workbook.SheetNames[0];
+			const worksheet = workbook.Sheets[firstSheetName];
+			const data = XLSX.utils.sheet_to_json(worksheet, {
+				header: 1,
+				defval: ''
+			});
+
+			// Convert to array of objects with lowercase headers
+			const headers = (data[0] as string[]).map((h) => h.toLowerCase());
+			const rows = data.slice(1).map((row: any) => {
+				const obj: any = {};
+				headers.forEach((header, i) => {
+					obj[header] = row[i] || '';
+				});
+				return obj;
+			});
+
+			return rows.map((row: any) => row.clipname).filter(Boolean);
+		} else {
+			// Handle CSV (existing logic)
+			csvData = await file.text();
+			const outPut = Papa.parse(csvData, {
+				header: true,
+				transformHeader: (header: string) => header.toLowerCase()
+			}).data.map((row: any) => row.clipname);
+			return outPut;
+		}
 	};
 
 	const checkCrossFiles = async () => {
@@ -97,14 +124,27 @@
 			});
 	});
 
+	// Reactively check cross files when videos are uploaded/removed
+	$effect(() => {
+		// Only check if we have both CSV and video files
+		if ($uploadedCsvFile && $csvVideoFilenames.length > 0) {
+			checkCrossFiles();
+		}
+	});
+
 	const isValidCsvFile = (file: File): boolean => {
 		const csvMimeTypes = ['text/csv', 'application/csv', 'text/comma-separated-values'];
+		const xlsxMimeTypes = [
+			'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+			'application/vnd.ms-excel'
+		];
 		const csvExtensions = ['.csv'];
+		const xlsxExtensions = ['.xlsx', '.xls'];
 		const fileName = file.name.toLowerCase();
 
 		return (
-			csvMimeTypes.includes(file.type.toLowerCase()) ||
-			csvExtensions.some((ext) => fileName.endsWith(ext))
+			[...csvMimeTypes, ...xlsxMimeTypes].includes(file.type.toLowerCase()) ||
+			[...csvExtensions, ...xlsxExtensions].some((ext) => fileName.endsWith(ext))
 		);
 	};
 
@@ -135,6 +175,12 @@
 			if (csvFiles.length === 0) {
 				console.warn('No valid CSV files found in dropped files');
 				return;
+			}
+
+			if ($uploadedCsvFile) {
+				csvVideoFilenames.set([]);
+				$missingFilenames = [];
+				$unknownFiles = [];
 			}
 
 			$uploadedCsvFile = csvFiles[0];
@@ -202,7 +248,7 @@
 			{#if type === 'csv'}
 				<input
 					type="file"
-					accept=".csv, .xslx"
+					accept=".csv, .xlsx"
 					multiple={false}
 					id="csv_input"
 					class="upload_input"
