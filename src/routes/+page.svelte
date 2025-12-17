@@ -7,7 +7,6 @@
 	import eraseIcon from '$lib/assets/icons/erase.svg';
 	import arrowIcon from '$lib/assets/icons/arrow.svg';
 	import Papa from 'papaparse';
-	import * as XLSX from 'xlsx';
 	import InputFile from '$lib/components/inputFile.svelte';
 	import trashIcon from '$lib/assets/icons/delete.svg';
 	import {
@@ -17,16 +16,16 @@
 		uploadedCsvFile,
 		unknownFiles
 	} from '$lib/stores';
+	import { extractCsvData } from '$lib/tableUtils';
 	import { untrack } from 'svelte';
 	import { clearFiles } from '$lib/fileStorage';
-
-	import { afterNavigate } from '$app/navigation';
-	import { onMount } from 'svelte';
 
 	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 
 	let csvData = $state<string>('');
+
+	$inspect('uploadedVideoFiles :', $uploadedVideoFiles);
 
 	const clearQueue = async () => {
 		$uploadedVideoFiles = [];
@@ -40,42 +39,7 @@
 
 	$inspect('uploadedCsvFile :', $uploadedCsvFile);
 
-	const extractCsvData = async (file: File): Promise<string[]> => {
-		const fileName = file.name.toLowerCase();
-		const isXlsx = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
-
-		if (isXlsx) {
-			// Handle XLSX
-			const arrayBuffer = await file.arrayBuffer();
-			const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-			const firstSheetName = workbook.SheetNames[0];
-			const worksheet = workbook.Sheets[firstSheetName];
-			const data = XLSX.utils.sheet_to_json(worksheet, {
-				header: 1,
-				defval: ''
-			});
-
-			// Convert to array of objects with lowercase headers
-			const headers = (data[0] as string[]).map((h) => h.toLowerCase());
-			const rows = data.slice(1).map((row: any) => {
-				const obj: any = {};
-				headers.forEach((header, i) => {
-					obj[header] = row[i] || '';
-				});
-				return obj;
-			});
-
-			return rows.map((row: any) => row.clipname).filter(Boolean);
-		} else {
-			// Handle CSV (existing logic)
-			csvData = await file.text();
-			const outPut = Papa.parse(csvData, {
-				header: true,
-				transformHeader: (header: string) => header.toLowerCase()
-			}).data.map((row: any) => row.clipname);
-			return outPut;
-		}
-	};
+	
 
 	const checkCrossFiles = async () => {
 		const uploadedFileNames = $uploadedVideoFiles.map((file) => file.name);
@@ -102,7 +66,8 @@
 	const updateCsvFilenames = async (csvFile: File): Promise<string[]> => {
 		if (!csvFile) return [];
 		const names = await extractCsvData(csvFile);
-		return names.filter(Boolean);
+		// Remove any name that is blank or consists only of whitespace
+		return names.filter((name) => typeof name === 'string' && name.trim() !== '');
 	};
 
 	//We reactively update the value of csvVideoFilenames

@@ -9,7 +9,6 @@ const RENDERED_VIDEO_STORE_NAME = 'renderedVideo';
 
 let db: IDBDatabase | null = null;
 
-// Initialize the database
 export async function initDB(): Promise<IDBDatabase> {
 	if (db) return db;
 

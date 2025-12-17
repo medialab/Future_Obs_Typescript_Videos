@@ -17,7 +17,8 @@
 
 	import type { VideoData } from '$lib/remotion/SingleVideoComp';
 
-	import { csvToJson, triggerBlobDownload } from '$lib/utils';
+	import { triggerBlobDownload } from '$lib/utils';
+	import { csvToJson } from '$lib/tableUtils';
 	import { storeRenderedVideo, clearFile, loadRenderedVideo } from '$lib/fileStorage';
 
 	let chipStatus = $state<'pending' | 'rendering' | 'success' | 'error'>('pending');
@@ -45,16 +46,30 @@
 		// Collect all matching files
 		for (const video of videos) {
 			const clipName = (video as any).ClipName?.trim();
-			if (clipName) {
-				const matchingFile = $uploadedVideoFiles.find(
-					(f) => f.name.replace(/\.(mp4|mov|avi|mkv)$/i, '') === clipName
-				);
-				if (matchingFile) {
-					formData.append('files', matchingFile);
-				} else {
-					console.warn(`No matching file found for ClipName: ${clipName}`);
-				}
+			if (!clipName) {
+				console.warn('Video missing ClipName, skipping:', video);
+				continue;
 			}
+
+			const matchingFile: File | undefined = $uploadedVideoFiles.find(
+				(f) => f.name.replace(/\.(mp4|mov|avi|mkv)$/i, '') === clipName
+			);
+
+			if (matchingFile) {
+				const blobLike = matchingFile as File | Blob;
+				const fileToSend =
+					blobLike instanceof File
+					? blobLike
+					: new File([blobLike], (blobLike as any).name ?? `${clipName}.mp4`, {
+						type: (blobLike as any).type ?? 'video/mp4',
+						lastModified: (blobLike as any).lastModified ?? Date.now()
+						});
+
+				formData.append('files', fileToSend);
+				} else {
+				console.warn(`No matching file found for ClipName: ${clipName}`);
+				}
+			
 		}
 
 		const response = await fetch('/composer/api/upload', {

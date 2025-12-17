@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ASSET_EXT_RE = /\.(mp4|mov|mkv|avi)$/i;
 const TTL_MS = 25 * 60 * 1000;
-// Use repo-level tmp/uploads so read/cleanup endpoints resolve the same folder
+
 const TMP_VIDEOS_DIR = path.join(process.cwd(), 'tmp/uploads');
 
 async function ensureDirExistence(dir: string) {
@@ -28,7 +28,7 @@ async function cleanupOldVideos(dir: string) {
 		const entries = await readdir(dir, {
 			withFileTypes: true
 		});
-		const now = Date.now(); //get time
+		const now = Date.now();
 
 		for (const entry of entries) {
 			if (!entry.isFile() || !ASSET_EXT_RE.test(entry.name)) continue;
