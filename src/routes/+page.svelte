@@ -10,22 +10,18 @@
 	import InputFile from '$lib/components/inputFile.svelte';
 	import trashIcon from '$lib/assets/icons/delete.svg';
 	import {
-		csvVideoFilenames,
+		requiredFilenames,
 		uploadedVideoFiles,
 		missingFilenames,
 		uploadedCsvFile,
 		unknownFiles
 	} from '$lib/stores';
-	import { extractCsvData } from '$lib/tableUtils';
+	import { extractCsvData, isValidCsvFile } from '$lib/tableUtils';
 	import { untrack } from 'svelte';
 	import { clearFiles } from '$lib/fileStorage';
 
 	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
-
-	let csvData = $state<string>('');
-
-	$inspect('uploadedVideoFiles :', $uploadedVideoFiles);
 
 	const clearQueue = async () => {
 		$uploadedVideoFiles = [];
@@ -38,23 +34,23 @@
 	};
 
 	$inspect('uploadedCsvFile :', $uploadedCsvFile);
-
-	
+	$inspect('uploadedVideoFiles :', $uploadedVideoFiles);
+	$inspect('requiredFilenames :', $requiredFilenames);
 
 	const checkCrossFiles = async () => {
-		const uploadedFileNames = $uploadedVideoFiles.map((file) => file.name);
+		const uploadedFileNames: string[] = $uploadedVideoFiles.map((file) => file.name);
 		const missing: string[] = [];
 
-		for (const csvFilename of $csvVideoFilenames) {
-			const hasMatch = uploadedFileNames.some(
-				(uploadedName) =>
-					uploadedName === csvFilename ||
-					uploadedName === `${csvFilename}.mp4` ||
-					uploadedName.startsWith(csvFilename)
+		for (const requiredFilename of $requiredFilenames) {
+			const hasMatch: boolean = uploadedFileNames.some(
+				(uploadedFileName) =>
+					uploadedFileName === requiredFilename ||
+					uploadedFileName === `${requiredFilename}.mp4` ||
+					uploadedFileName.startsWith(requiredFilename)
 			);
 
 			if (!hasMatch) {
-				missing.push(csvFilename);
+				missing.push(requiredFilename);
 			}
 		}
 
@@ -70,18 +66,16 @@
 		return names.filter((name) => typeof name === 'string' && name.trim() !== '');
 	};
 
-	//We reactively update the value of csvVideoFilenames
+	//We reactively update the value of requiredFilenames
 	$effect(() => {
-		console.log('$effect triggered, uploadedCsvFile:', $uploadedCsvFile);
 		if (!$uploadedCsvFile) {
-			csvVideoFilenames.set([]);
+			requiredFilenames.set([]);
 			return;
 		}
 
 		updateCsvFilenames($uploadedCsvFile)
 			.then((names) => {
-				console.log('updateCsvFilenames resolved with:', names);
-				csvVideoFilenames.set(names);
+				requiredFilenames.set(names);
 				checkCrossFiles();
 			})
 			.catch((err) => {
@@ -92,26 +86,10 @@
 	// Reactively check cross files when videos are uploaded/removed
 	$effect(() => {
 		// Only check if we have both CSV and video files
-		if ($uploadedCsvFile && $csvVideoFilenames.length > 0) {
+		if ($uploadedCsvFile && $requiredFilenames.length > 0) {
 			checkCrossFiles();
 		}
 	});
-
-	const isValidCsvFile = (file: File): boolean => {
-		const csvMimeTypes = ['text/csv', 'application/csv', 'text/comma-separated-values'];
-		const xlsxMimeTypes = [
-			'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-			'application/vnd.ms-excel'
-		];
-		const csvExtensions = ['.csv'];
-		const xlsxExtensions = ['.xlsx', '.xls'];
-		const fileName = file.name.toLowerCase();
-
-		return (
-			[...csvMimeTypes, ...xlsxMimeTypes].includes(file.type.toLowerCase()) ||
-			[...csvExtensions, ...xlsxExtensions].some((ext) => fileName.endsWith(ext))
-		);
-	};
 
 	const isValidVideoFile = (file: File): boolean => {
 		const videoMimeTypes = [
@@ -143,13 +121,13 @@
 			}
 
 			if ($uploadedCsvFile) {
-				csvVideoFilenames.set([]);
+				requiredFilenames.set([]);
 				$missingFilenames = [];
 				$unknownFiles = [];
 			}
 
 			$uploadedCsvFile = csvFiles[0];
-			csvVideoFilenames.set(await extractCsvData($uploadedCsvFile));
+			requiredFilenames.set(await extractCsvData($uploadedCsvFile));
 		} else {
 			// Filter to only video files
 			const videoFiles = Array.from(files).filter(isValidVideoFile);
@@ -169,9 +147,6 @@
 			});
 		}
 	};
-
-	$inspect('csvVideoFilenames :', $csvVideoFilenames);
-	$inspect('uploadedCsvFile :', $uploadedCsvFile);
 </script>
 
 <Header type="home" />
@@ -245,7 +220,7 @@
 				class="erase_csv warning flex centered"
 				onclick={() => {
 					$uploadedCsvFile = undefined; //reset uploadedCsvFile
-					$csvVideoFilenames = []; //reset csvVideoFilenames
+					$requiredFilenames = []; //reset requiredFilenames
 					$missingFilenames = []; //reset missingFilenames
 					$unknownFiles = []; //reset unknownFiles
 				}}
@@ -343,11 +318,7 @@
 			</div>
 			<div class="flex v minigap">
 				<p class="microtitle">CSV Rows:</p>
-				{#if csvData}
-					<p class="annotation">{Papa.parse(csvData).data.length} rows</p>
-				{:else}
-					<p class="annotation">0 rows</p>
-				{/if}
+				<p class="annotation">0 rows</p>
 			</div>
 		</div>
 	</div>

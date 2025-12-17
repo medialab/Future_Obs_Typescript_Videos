@@ -7,85 +7,47 @@
 
 	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
-	import { renderedVideo } from '$lib/stores';
-	import type { RenderedVideo } from '$lib/stores';
-	import { uploadedVideoFiles, uploadedCsvFile, currentFrame } from '$lib/stores';
-	import Header from '$lib/components/header.svelte';
-	import { parseTimeToSeconds } from '$lib/utils';
 
+	// Stores
+	import {
+		renderedVideo,
+		uploadedVideoFiles,
+		uploadedCsvFile,
+		timelineDurationInFrames,
+		currentFrame
+	} from '$lib/stores';
+
+	// Components
+	import Header from '$lib/components/header.svelte';
 	import RemotionPlayer from '$lib/remotion/RemotionPlayer.svelte';
 
-	import type { VideoData } from '$lib/remotion/SingleVideoComp';
-
-	import { triggerBlobDownload } from '$lib/utils';
+	// Utilities
+	import { parseTimeToSeconds, triggerBlobDownload } from '$lib/utils';
+	import { parseMedia } from '@remotion/media-parser';
 	import { csvToJson } from '$lib/tableUtils';
 	import { storeRenderedVideo, clearFile, loadRenderedVideo } from '$lib/fileStorage';
 
+	// Types
+	import type { VideoData, RenderVideoData, RenderedVideo } from '$lib/types';
+
+	let finalVideoDataset = $state<any[]>([]);
 	let chipStatus = $state<'pending' | 'rendering' | 'success' | 'error'>('pending');
-
-	type RenderVideoData = VideoData & {
-		videoSrcPath?: string;
-		renderSrc?: string;
-		isRendering?: boolean;
-	};
-
-	let videos = $state<any[]>([]);
 	let isRendering = $state(false);
 	let renderProgress = $state(0);
-	let currentScene = $state(0);
 	let renderStatus = $state('Ready to render');
-	let totalDuration: number = $derived(videos.reduce((sum, v) => sum + (v.duration || 0), 0));
 
-	$inspect('renderStatus :', renderStatus);
-
-	async function uploadVideosForRendering(videos: VideoData[]): Promise<RenderVideoData[]> {
-		const formData = new FormData();
-
-		formData.append('videos', JSON.stringify(videos));
-
-		// Collect all matching files
-		for (const video of videos) {
-			const clipName = (video as any).ClipName?.trim();
-			if (!clipName) {
-				console.warn('Video missing ClipName, skipping:', video);
-				continue;
-			}
-
-			const matchingFile: File | undefined = $uploadedVideoFiles.find(
-				(f) => f.name.replace(/\.(mp4|mov|avi|mkv)$/i, '') === clipName
-			);
-
-			if (matchingFile) {
-				const blobLike = matchingFile as File | Blob;
-				const fileToSend =
-					blobLike instanceof File
-					? blobLike
-					: new File([blobLike], (blobLike as any).name ?? `${clipName}.mp4`, {
-						type: (blobLike as any).type ?? 'video/mp4',
-						lastModified: (blobLike as any).lastModified ?? Date.now()
-						});
-
-				formData.append('files', fileToSend);
-				} else {
-				console.warn(`No matching file found for ClipName: ${clipName}`);
-				}
-			
+	$effect(() => {
+		const duration = $timelineDurationInFrames;
+		if (duration > 0) {
+			const progressFraction = renderProgress / 100;
+			const newFrame = Math.round(progressFraction * duration);
+			currentFrame.set(newFrame);
+		} else {
+			currentFrame.set(0);
 		}
+	});
 
-		const response = await fetch('/composer/api/upload', {
-			method: 'POST',
-			body: formData
-		});
-
-		if (!response.ok) {
-			const errorText = await response.text();
-			throw new Error(`Failed to upload videos: ${response.statusText} - ${errorText}`);
-		}
-
-		const { videos: updatedVideos } = await response.json();
-		console.log('Uploaded videos:', videos);
-		return updatedVideos as RenderVideoData[];
-	}
+	$inspect('Render status :', renderStatus);
 
 	async function generateVideo(videos: RenderVideoData[]) {
 		return new Promise<Blob>((resolve, reject) => {
@@ -180,7 +142,55 @@
 		});
 	}
 
+	async function uploadVideosForRendering(videos: VideoData[]): Promise<RenderVideoData[]> {
+		const formData = new FormData();
+
+		formData.append('videos', JSON.stringify(videos));
+
+		for (const video of videos) {
+			const clipName = (video as any).ClipName?.trim();
+			if (!clipName) {
+				console.warn('Video missing ClipName, skipping:', video);
+				continue;
+			}
+
+			const matchingFile: File | undefined = $uploadedVideoFiles.find(
+				(f) => f.name.replace(/\.(mp4|mov|avi|mkv)$/i, '') === clipName
+			);
+
+			if (matchingFile) {
+				const blobLike = matchingFile as File | Blob;
+				const fileToSend =
+					blobLike instanceof File
+						? blobLike
+						: new File([blobLike], (blobLike as any).name ?? `${clipName}.mp4`, {
+								type: (blobLike as any).type ?? 'video/mp4',
+								lastModified: (blobLike as any).lastModified ?? Date.now()
+							});
+
+				formData.append('files', fileToSend);
+			} else {
+				console.warn(`No matching file found for ClipName: ${clipName}`);
+			}
+		}
+
+		const response = await fetch('/composer/api/upload', {
+			method: 'POST',
+			body: formData
+		});
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			throw new Error(`Failed to upload videos: ${response.statusText} - ${errorText}`);
+		}
+
+		const { videos: updatedVideos } = await response.json();
+		console.log('Uploaded videos:', videos);
+		return updatedVideos as RenderVideoData[];
+	}
+
 	$effect(() => {
+		//We update the final dataset reactively
 		if (!browser) return;
 
 		if (!$uploadedCsvFile || !$uploadedVideoFiles || $uploadedVideoFiles.length === 0) {
@@ -189,27 +199,67 @@
 
 		(async () => {
 			try {
-				const json = await csvToJson($uploadedCsvFile, $uploadedVideoFiles);
-				videos = await addDurationToVideos(json.data);
-				console.log('videos with duration', videos);
+				const json = await csvToJson($uploadedCsvFile);
+
+				if (json.data && Array.isArray(json.data)) {
+					if ($uploadedVideoFiles && $uploadedVideoFiles.length > 0) {
+						json.data = json.data.map((row: any) => {
+							const clipName = row.ClipName?.trim();
+
+							if (clipName) {
+								const matchingFile = $uploadedVideoFiles.find(
+									(f) => f.name.replace('.mp4', '').replace('.mov', '') === clipName
+								);
+
+								if (matchingFile) {
+									row.videoSrc = URL.createObjectURL(matchingFile);
+								}
+							}
+
+							return row;
+						});
+					}
+				} else {
+					throw console.error(400, 'We encountered an error parsing the CSV file');
+				}
+
+				const f: VideoData[] = await amplifyVideoData(json.data);
+
+				finalVideoDataset = f; //Here we consolidate the final dataset we use
+
+				console.log('Final video dataset:', finalVideoDataset);
 			} catch (error) {
 				console.error('Error loading videos:', error);
 			}
 		})();
 	});
 
-	async function addDurationToVideos(videos: any[]): Promise<VideoData[]> {
+	async function amplifyVideoData(data: any[]): Promise<VideoData[]> {
 		return Promise.all(
-			videos.map(async (video) => {
+			data.map(async (video) => {
 				const videoSrc = video.videoSrc;
-				const duration = parseTimeToSeconds(video.EndTime) - parseTimeToSeconds(video.BeginTime);
+
+				const metadata = await parseMedia({
+					src: videoSrc,
+					fields: { fps: true, dimensions: true }
+				});
+
+				if (!metadata.fps) {
+					throw console.error('FPS not found for video: ', video.ClipName);
+				}
+
 				return {
 					...video,
 					videoSrc,
-					duration,
+					durationInFrames: Math.ceil(
+						(parseTimeToSeconds(video.EndTime) - parseTimeToSeconds(video.BeginTime)) * metadata.fps
+					),
 					BeginTime: video.BeginTime,
-					EndTime: video.EndTime
-				};
+					EndTime: video.EndTime,
+					fps: metadata.fps,
+					BeginFrame: parseTimeToSeconds(video.BeginTime) * metadata.fps,
+					EndFrame: parseTimeToSeconds(video.EndTime) * metadata.fps
+				}; //Here we actually amplify the videodata
 			})
 		);
 	}
@@ -221,7 +271,7 @@
 		chipStatus = 'rendering';
 		try {
 			renderStatus = 'Uploading videos to server...';
-			const videosWithServerPaths = await uploadVideosForRendering(videos);
+			const videosWithServerPaths = await uploadVideosForRendering(finalVideoDataset);
 			console.log('Videos uploaded, server paths:', videosWithServerPaths);
 
 			const assetOrigin =
@@ -247,7 +297,7 @@
 			const blob = await generateVideo(renderReadyVideos);
 
 			renderedVideo.set([{ filename, blob }]);
-			renderStatus = `Completed ${currentScene}/${videos.length}`;
+			renderStatus = 'Completed';
 			chipStatus = 'success';
 			isRendering = false;
 
@@ -288,7 +338,7 @@
 	});
 
 	onDestroy(() => {
-		videos.forEach((video: any) => {
+		finalVideoDataset.forEach((video: any) => {
 			if (video.videoSrc?.startsWith('blob:')) {
 				URL.revokeObjectURL(video.videoSrc);
 			}
@@ -298,15 +348,31 @@
 
 <Header type="composer" />
 
-{#snippet timelinePill(video?: VideoData, index: number = 0)}
-	{@const fps = 30}
-	{@const startFrame = videos.slice(0, index).reduce((sum, v) => sum + (v.duration || 0) * fps, 0)}
-	{@const endFrame = startFrame + (video?.duration || 0) * fps}
+{#snippet timelinePill(video: VideoData, totaleTimelineWidth: number, index: number = 0)}
+	{@const startFrame = finalVideoDataset
+		.slice(0, index)
+		.reduce(
+			(sum, v) =>
+				sum +
+				(typeof (v as any).durationInFrames === 'number'
+					? (v as any).durationInFrames
+					: (v.duration || 0) * ((v as any).fps ?? 25)),
+			0
+		)}
+	{@const endFrame =
+		startFrame +
+		((typeof (video as any)?.durationInFrames === 'number'
+			? (video as any).durationInFrames
+			: (video?.durationInFrames || 0) * ((video as any)?.fps ?? 25)) as number)}
 	{@const isActive = $currentFrame >= startFrame && $currentFrame < endFrame}
 	<button
 		class="container flex v minigap centered"
 		class:success={isActive}
-		style="width: {video?.duration ? (video.duration / totalDuration) * 100 + '%' : '0px'};"
+		style="width: {(video as any)?.durationInFrames
+			? ((video as any).durationInFrames / totaleTimelineWidth) * 100 + '%'
+			: video?.durationInFrames
+				? ((video.durationInFrames * ((video as any).fps ?? 25)) / totaleTimelineWidth) * 100 + '%'
+				: '0px'};"
 		onclick={() => {
 			$currentFrame = startFrame + 1; //The one is perceptual for the first segment
 		}}
@@ -372,14 +438,16 @@
 	</div>
 	<div class="player_console flex v" id="remotion_player_container">
 		<div class="flex h spacebetween" style="padding: 0 5px;">
-			<p class="annotation">EOLIEN_YTB_22.MP4</p>
+			<p class="annotation">
+				{$uploadedCsvFile?.name.trim().split('.')[0]}
+			</p>
 		</div>
-		{#key videos && $uploadedVideoFiles && $uploadedCsvFile}
-			<RemotionPlayer segments={videos} controls={true} loop={false} autoPlay={false} />
+		{#key finalVideoDataset && $uploadedVideoFiles && $uploadedCsvFile}
+			<RemotionPlayer segments={finalVideoDataset} controls={true} loop={false} autoPlay={false} />
 		{/key}
 		<div class="timeline flex h minigap">
-			{#each videos as v, index}
-				{@render timelinePill(v, index)}
+			{#each finalVideoDataset as v, index}
+				{@render timelinePill(v, $timelineDurationInFrames, index)}
 			{/each}
 		</div>
 	</div>

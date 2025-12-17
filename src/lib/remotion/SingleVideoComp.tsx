@@ -1,31 +1,15 @@
 import { AbsoluteFill, Img, Sequence, OffthreadVideo, staticFile } from 'remotion';
 import React from 'react';
 import { parseTimeToSeconds } from '$lib/utils';
-
-export type VideoData = {
-	Title?: string;
-	Date?: string;
-	Location?: string;
-	Comment_authors?: string;
-	Comments?: string;
-	Post_author?: string;
-	Platform?: 'YOUTUBE' | 'TIKTOK' | 'INSTAGRAM' | 'FACEBOOK' | 'OTHER';
-	duration?: number;
-	ClipName?: string;
-	videoSrc?: string;
-	videoSrcPath?: string;
-	renderSrc?: string;
-	isRendering?: boolean;
-	BeginTime?: string;
-	EndTime?: string;
-};
+import type { VideoData } from '$lib/types';
 
 export const SingleVideoComp: React.FC<{
 	data: VideoData;
 	videoSrc?: string;
-	duration: number;
+	duration?: number;
+	durationInFrames?: number;
 	isRendering?: boolean;
-}> = ({ data, videoSrc, duration, isRendering }) => {
+}> = ({ data, videoSrc, duration, durationInFrames, isRendering }) => {
 	const canvasHeight = 1080;
 	const videoWidth = 1200;
 	const videoHeight = videoWidth * (9 / 16) + 25;
@@ -34,11 +18,19 @@ export const SingleVideoComp: React.FC<{
 	const beginTimeSeconds = data.BeginTime ? parseTimeToSeconds(data.BeginTime) : 0;
 	const endTimeSeconds = data.EndTime ? parseTimeToSeconds(data.EndTime) : 0;
 
+	const fps = data.fps ?? 25;
+
 	const trimmedDuration = endTimeSeconds - beginTimeSeconds;
-	const trimmedDurationFrames = Math.ceil(trimmedDuration * 30);
+	const trimmedDurationFrames = Math.ceil(trimmedDuration * fps);
 
 	const clipDurationFrames =
-		trimmedDurationFrames > 0 ? trimmedDurationFrames : Math.ceil(duration * 30);
+		trimmedDurationFrames > 0
+			? trimmedDurationFrames
+			: typeof data.durationInFrames === 'number'
+				? data.durationInFrames
+				: typeof durationInFrames === 'number'
+					? durationInFrames
+					: Math.ceil((duration ?? 0) * fps);
 
 	if (!data) {
 		return null;
@@ -102,8 +94,8 @@ export const SingleVideoComp: React.FC<{
 			>
 				<OffthreadVideo
 					src={staticVideoSrc}
-					trimBefore={beginTimeSeconds * 30}
-					trimAfter={endTimeSeconds * 30}
+					trimBefore={beginTimeSeconds * fps}
+					trimAfter={endTimeSeconds * fps}
 					style={{ width: '100%', height: '100%', objectFit: 'cover' }}
 					muted={false}
 				/>

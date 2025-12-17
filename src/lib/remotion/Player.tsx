@@ -1,13 +1,13 @@
 import React from 'react';
 import { Player } from '@remotion/player';
 import { SingleVideoComp } from './SingleVideoComp';
-import type { VideoData } from './SingleVideoComp';
+import type { VideoData } from '../types';
 
 export type RemotionPlayerProps = {
 	videoData: VideoData;
 	videoSrc: string;
 	bgImg: string;
-	duration: number;
+	timelineDurationInFrames: number;
 	width?: number;
 	height?: number;
 	controls?: boolean;
@@ -18,30 +18,24 @@ export type RemotionPlayerProps = {
 export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
 	videoData,
 	videoSrc,
-	bgImg,
-	duration,
+	timelineDurationInFrames,
 	width,
-	height,
-	controls = true,
-	loop = false,
-	autoPlay = false
+	height
 }) => {
-	const durationInFrames = Math.ceil(duration * 30);
-
 	return (
 		<Player
 			component={SingleVideoComp}
-			durationInFrames={durationInFrames}
+			durationInFrames={timelineDurationInFrames}
 			compositionWidth={1920}
 			compositionHeight={1080}
-			fps={30}
-			controls={controls}
-			loop={loop}
-			autoPlay={autoPlay}
+			fps={25}
+			controls={true}
+			loop={false}
+			autoPlay={false}
 			inputProps={{
 				data: videoData,
 				videoSrc,
-				duration
+				durationInFrames: timelineDurationInFrames
 			}}
 			style={{
 				width,

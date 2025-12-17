@@ -4,22 +4,22 @@
 	import incorrectIcon from '$lib/assets/icons/incorrect.svg';
 	import pendingIcon from '$lib/assets/icons/pending.svg';
 	import { clearFile } from '$lib/fileStorage';
-	import { csvVideoFilenames, uploadedVideoFiles, unknownFiles } from '$lib/stores';
+	import { requiredFilenames, uploadedVideoFiles, unknownFiles } from '$lib/stores';
 	import { untrack } from 'svelte';
 
 	let props = $props<{ file: Blob }>();
 
 	let status = $state<'pending' | 'correct' | 'incorrect'>('pending');
 
-	const getFileStatus = async (fileName: string, csvVideoFilenames: string[]) => {
+	const getFileStatus = async (fileName: string, requiredFilenames: string[]) => {
 		//console.log('getting file status for', fileName);
 		if (!fileName) return 'pending';
 
-		if (csvVideoFilenames.length > 0) {
+		if (requiredFilenames.length > 0) {
 			const cleanFilename = fileName.replace('.mp4', '').replace('.mov', '');
 
 			// defensively handle unexpected non-string entries
-			const foundFilename = csvVideoFilenames.find(
+			const foundFilename = requiredFilenames.find(
 				(videoFilename) =>
 					typeof videoFilename === 'string' && videoFilename.includes(cleanFilename)
 			);
@@ -57,12 +57,12 @@
 	};
 
 	$effect(() => {
-		if ($csvVideoFilenames.length === 0) {
-			console.log('csvVideoFilenames is empty, setting status to pending');
+		if ($requiredFilenames.length === 0) {
+			console.log('requiredFilenames is empty, setting status to pending');
 			status = 'pending';
 			return;
 		} else {
-			getFileStatus(props.file.name, $csvVideoFilenames).then((newStatus) => {
+			getFileStatus(props.file.name, $requiredFilenames).then((newStatus) => {
 				status = newStatus;
 			});
 		}

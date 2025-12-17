@@ -1,43 +1,34 @@
 import { AbsoluteFill, Sequence, Img, staticFile } from 'remotion';
 import React from 'react';
 import { SingleVideoComp } from './SingleVideoComp';
-import type { VideoData } from './SingleVideoComp';
-import { linearTiming, springTiming, TransitionSeries } from '@remotion/transitions';
+import type { VideoData } from '$lib/types';
+import { springTiming, TransitionSeries } from '@remotion/transitions';
 
 import { fade } from '@remotion/transitions/fade';
-import { wipe } from '@remotion/transitions/wipe';
 
 export type MasterCompositionProps = {
 	segments: VideoData[];
 };
 
 export const MasterComposition: React.FC<MasterCompositionProps> = ({ segments }) => {
-	let currentFrame = 0;
-	const fps = 30;
-	const segmentFrames = segments.map((segment) => {
-		const startFrame = currentFrame;
-		const durationFrames = Math.ceil((segment.duration as number) * fps);
-		currentFrame += durationFrames;
-		return {
-			...segment,
-			startFrame,
-			durationFrames
-		};
-	});
+	if (segments.length === 0) {
+		return null;
+	}
 
 	return (
 		<AbsoluteFill>
 			<TransitionSeries>
-				{segmentFrames.map((segment, index) => (
-					<>
+				{segments.map((segment, index) => (
+					<React.Fragment key={`segment-wrap-${index}`}>
 						<TransitionSeries.Sequence
 							key={`segment-${index}`}
-							durationInFrames={Math.ceil((segment.duration as number) * fps)}
+							durationInFrames={segment.durationInFrames}
 						>
 							<SingleVideoComp
 								data={segment as VideoData}
 								videoSrc={segment.videoSrc as string}
-								duration={segment.duration as number}
+								duration={segment.durationInFrames as number}
+								durationInFrames={segment.durationInFrames}
 								isRendering={Boolean((segment as any).isRendering)}
 							/>
 						</TransitionSeries.Sequence>
@@ -47,7 +38,7 @@ export const MasterComposition: React.FC<MasterCompositionProps> = ({ segments }
 								timing={springTiming({ config: { damping: 200 } })}
 							/>
 						)}
-					</>
+					</React.Fragment>
 				))}
 			</TransitionSeries>
 

@@ -34,6 +34,7 @@
 	"dependencies": {
 		"@remotion/bundler": "4.0.384",
 		"@remotion/cli": "4.0.384",
+		"@remotion/media-parser": "^4.0.392",
 		"@remotion/player": "4.0.384",
 		"@remotion/renderer": "4.0.384",
 		"@remotion/transitions": "4.0.384",

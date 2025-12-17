@@ -5,7 +5,7 @@ import { error } from '@sveltejs/kit';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import type { RequestEvent } from '@sveltejs/kit';
-import type { VideoData } from '$lib/remotion/SingleVideoComp';
+import type { VideoData } from '$lib/types';
 import { readdir, stat, unlink } from 'fs/promises';
 
 const __filename = fileURLToPath(import.meta.url);

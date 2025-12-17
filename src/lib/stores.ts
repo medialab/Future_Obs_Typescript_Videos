@@ -1,19 +1,16 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { loadFiles, saveFiles, loadCsvFile, saveCsvFile } from './fileStorage';
-
-export type RenderedVideo = {
-	filename: string;
-	blob: Blob | undefined;
-};
+import type { RenderedVideo } from './types';
 
 export let renderedVideo = writable<RenderedVideo[]>([{ filename: '', blob: undefined }]);
-export let csvVideoFilenames = writable<string[]>([]);
+export let requiredFilenames = writable<string[]>([]);
 export let uploadedVideoFiles = writable<File[]>([]);
 export let missingFilenames = writable<string[]>([]);
 export let uploadedCsvFile = writable<File | undefined>(undefined);
 export let unknownFiles = writable<string[]>([]);
 export let currentFrame = writable<number>(0);
+export let timelineDurationInFrames = writable<number>(0);
 
 if (browser) {
 	loadFiles()

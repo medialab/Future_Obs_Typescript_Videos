@@ -3,8 +3,8 @@ import { bundle } from '@remotion/bundler';
 import { getCompositions, renderMedia } from '@remotion/renderer';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { VideoData } from '$lib/remotion/SingleVideoComp';
-import { mkdir, writeFile, rm } from 'fs/promises';
+import type { VideoData } from '$lib/types';
+import { mkdir, rm } from 'fs/promises';
 import { unlink } from 'fs/promises';
 import { error } from '@sveltejs/kit';
 import { existsSync } from 'fs';
@@ -12,7 +12,6 @@ import { existsSync } from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const TMP_VIDEOS_DIR = path.join(process.cwd(), 'tmp/uploads');
 const RENDERED_VIDEOS_DIR = path.join(process.cwd(), 'tmp/renders');
 
 export async function POST({ request }: RequestEvent) {
@@ -67,7 +66,6 @@ export async function POST({ request }: RequestEvent) {
 				controller.close();
 			};
 
-			// Cleanup function - now handles both bundle and static/videos files
 			const cleanup = async () => {
 				// Clean up bundle directory
 				if (bundleLocation) {
@@ -94,7 +92,7 @@ export async function POST({ request }: RequestEvent) {
 								}
 							})
 						);
-						console.log('Static/videos cleanup complete');
+						console.log(`${videoFilePaths} files cleanup complete`);
 					} catch (cleanupError) {
 						console.error('Error cleaning up static/videos files:', cleanupError);
 					}
@@ -226,11 +224,11 @@ export async function POST({ request }: RequestEvent) {
 					return;
 				}
 
-				// Calculate total duration
-				const totalDuration = renderingVideos.reduce((sum: number, seg: VideoData) => {
-					return sum + (seg.duration || 0);
+				// Calculate total duration in frames using precomputed per-segment frames
+				const totalDurationFrames = renderingVideos.reduce((sum: number, seg: VideoData) => {
+					return sum + seg.durationInFrames;
 				}, 0);
-				const totalDurationFrames = Math.ceil(totalDuration * 30);
+
 				composition.durationInFrames = totalDurationFrames;
 
 				sendMessage('status', { message: 'Starting render...', totalFrames: totalDurationFrames });
