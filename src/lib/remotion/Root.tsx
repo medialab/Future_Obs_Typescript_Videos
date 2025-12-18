@@ -6,9 +6,6 @@ import React from 'react';
 import type { CalculateMetadataFunction } from 'remotion';
 
 const calculateMetadata: CalculateMetadataFunction<MasterCompositionProps> = ({ props }) => {
-	const fps = 25;
-
-	// Calculate total duration from segments (already in frames when provided)
 	const durationInFrames = props.segments.reduce((sum, segment) => {
 		const frames =
 			typeof (segment as any).durationInFrames === 'number'

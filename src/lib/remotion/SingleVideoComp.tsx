@@ -1,4 +1,12 @@
-import { AbsoluteFill, Img, Sequence, OffthreadVideo, staticFile } from 'remotion';
+import {
+	AbsoluteFill,
+	Img,
+	Sequence,
+	OffthreadVideo,
+	staticFile,
+	useCurrentFrame,
+	interpolate
+} from 'remotion';
 import React from 'react';
 import { parseTimeToSeconds } from '$lib/utils';
 import type { VideoData } from '$lib/types';
@@ -22,6 +30,27 @@ export const SingleVideoComp: React.FC<{
 	const trimmedDurationFrames = Math.ceil(trimmedDuration * fps);
 
 	const clipDurationFrames = trimmedDurationFrames;
+	const frame = useCurrentFrame();
+
+	// Helper function for fade in/out opacity
+	const getFadeOpacity = (sequenceStartFrame: number, sequenceDuration: number) => {
+		const fadeFrames = 30; // Frames for fade in/out
+		const sequenceFrame = frame - sequenceStartFrame;
+
+		if (sequenceFrame < fadeFrames) {
+			return interpolate(sequenceFrame, [0, fadeFrames], [0, 1], {
+				extrapolateRight: 'clamp',
+				easing: (t) => t * t * (3 - 2 * t) // Smooth cubic ease-in-out curve
+			});
+		} else if (sequenceFrame > sequenceDuration - fadeFrames) {
+			return interpolate(sequenceFrame, [sequenceDuration - fadeFrames, sequenceDuration], [1, 0], {
+				extrapolateRight: 'clamp',
+				easing: (t) => t * t * (3 - 2 * t) // Smooth cubic ease-in-out curve
+			});
+		} else {
+			return 1;
+		}
+	};
 
 	if (!data) {
 		return null;
@@ -55,12 +84,12 @@ export const SingleVideoComp: React.FC<{
 		return null;
 	}
 
-	const commentsArray = (data.Comments || '§ Comment manquant')
+	const commentsArray = (data.Comments || '')
 		.split('§')
 		.map((c) => c.trim())
 		.filter(Boolean);
 
-	const Comment_authorsArray = (data.Comment_authors || '§ Author manquant')
+	const Comment_authorsArray = (data.Comment_authors || '§ 0 commentaires')
 		.split('§')
 		.map((c) => c.trim())
 		.filter(Boolean);
@@ -80,7 +109,8 @@ export const SingleVideoComp: React.FC<{
 					width: videoWidth,
 					height: videoHeight,
 					overflow: 'hidden',
-					zIndex: -11
+					zIndex: -11,
+					opacity: getFadeOpacity(0, clipDurationFrames)
 				}}
 			>
 				<OffthreadVideo
@@ -89,6 +119,7 @@ export const SingleVideoComp: React.FC<{
 					trimAfter={endTimeSeconds * fps}
 					style={{ width: '100%', height: '100%', objectFit: 'cover' }}
 					muted={false}
+					volume={getFadeOpacity(0, clipDurationFrames)}
 				/>
 			</div>
 
@@ -102,7 +133,8 @@ export const SingleVideoComp: React.FC<{
 						fontSize: 30,
 						color: 'black',
 						textAlign: 'left' as const,
-						zIndex: 3
+						zIndex: 3,
+						opacity: getFadeOpacity(0, clipDurationFrames)
 					}}
 				>
 					{data.Location}
@@ -119,7 +151,8 @@ export const SingleVideoComp: React.FC<{
 						fontSize: 30,
 						color: 'black',
 						textAlign: 'right' as const,
-						zIndex: 3
+						zIndex: 3,
+						opacity: getFadeOpacity(0, clipDurationFrames)
 					}}
 				>
 					{data.Date}
@@ -151,7 +184,8 @@ export const SingleVideoComp: React.FC<{
 						overflow: 'hidden',
 						textOverflow: 'ellipsis',
 						// Fallback for older browsers
-						maxHeight: '2.4em'
+						maxHeight: '2.4em',
+						opacity: getFadeOpacity(0, clipDurationFrames)
 					}}
 				>
 					{data.Title}
@@ -168,7 +202,8 @@ export const SingleVideoComp: React.FC<{
 						fontSize: 30,
 						color: 'black',
 						textAlign: 'left' as const,
-						zIndex: 3
+						zIndex: 3,
+						opacity: getFadeOpacity(0, clipDurationFrames)
 					}}
 				>
 					{data.Post_author}
@@ -181,65 +216,73 @@ export const SingleVideoComp: React.FC<{
 				style={{
 					position: 'absolute',
 					left: `${videoWidth - 80}px`,
-					top: `${canvasHeight / 2 + videoHeight / 2 - 18}px`,
+					top: `${canvasHeight / 2 + videoHeight / 2 - 25}px`,
 					width: 50,
 					height: 'auto',
-					zIndex: 3
+					zIndex: 3,
+					opacity: getFadeOpacity(0, clipDurationFrames)
 				}}
 			/>
 
-			{Comment_authorsArray.map((author, i) => (
-				<Sequence
-					key={`author-${i}`}
-					from={i * singleCommentDuration}
-					durationInFrames={singleCommentDuration}
-				>
-					<div
-						id="comment-author-text"
-						style={{
-							position: 'absolute',
-							left: `${20 + videoWidth}px`,
-							top: `${canvasHeight / 3.5}px`,
-							fontSize: 35,
-							color: 'white',
-							opacity: 0.5,
-							maxWidth: '25ch',
-							whiteSpace: 'wrap',
-							fontStyle: 'italic',
-							textAlign: 'left' as const,
-							zIndex: 3
-						}}
+			{Comment_authorsArray.map((author, i) => {
+				const sequenceStart = i * singleCommentDuration;
+				return (
+					<Sequence
+						key={`author-${i}`}
+						from={sequenceStart}
+						durationInFrames={singleCommentDuration}
 					>
-						@{author}
-					</div>
-				</Sequence>
-			))}
+						<div
+							id="comment-author-text"
+							style={{
+								position: 'absolute',
+								left: `${20 + videoWidth}px`,
+								top: `${canvasHeight / 3.5}px`,
+								fontSize: 35,
+								color: 'white',
+								opacity: 0.5 * getFadeOpacity(sequenceStart, singleCommentDuration),
+								maxWidth: '25ch',
+								whiteSpace: 'wrap',
+								fontStyle: 'italic',
+								textAlign: 'left' as const,
+								zIndex: 3
+							}}
+						>
+							@{author}
+						</div>
+					</Sequence>
+				);
+			})}
 
-			{commentsArray.map((comment, i) => (
-				<Sequence
-					key={`comment-${i}`}
-					from={i * singleCommentDuration}
-					durationInFrames={singleCommentDuration}
-				>
-					<div
-						id="comment-text"
-						style={{
-							position: 'absolute',
-							left: `${20 + videoWidth}px`,
-							top: `${canvasHeight / 3.5 + 50}px`,
-							fontSize: 40,
-							color: 'white',
-							textAlign: 'left' as const,
-							maxWidth: '25ch',
-							whiteSpace: 'wrap',
-							lineHeight: 1.2,
-							zIndex: 3
-						}}
+			{commentsArray.map((comment, i) => {
+				const sequenceStart = i * singleCommentDuration;
+				return (
+					<Sequence
+						key={`comment-${i}`}
+						from={sequenceStart}
+						durationInFrames={singleCommentDuration}
 					>
-						{comment}
-					</div>
-				</Sequence>
-			))}
+						<div
+							id="comment-text"
+							style={{
+								position: 'absolute',
+								left: `${20 + videoWidth}px`,
+								top: `${canvasHeight / 3.5 + 50}px`,
+								fontSize: 40,
+								color: 'white',
+								textAlign: 'left' as const,
+								maxWidth: '25ch',
+								whiteSpace: 'wrap',
+								lineHeight: 1.2,
+								zIndex: 3,
+								opacity: getFadeOpacity(sequenceStart, singleCommentDuration)
+							}}
+						>
+							{comment}
+						</div>
+					</Sequence>
+				);
+			})}
 		</AbsoluteFill>
 	);
 };
@@ -247,10 +290,14 @@ export const SingleVideoComp: React.FC<{
 function getPlatformIcon(platform: VideoData['Platform']): string {
 	// Use staticFile() to reference files in the static folder
 	if (platform === 'INSTAGRAM') {
-		return staticFile('/InstaIcon.svg');
+		return staticFile('/INSTAGRAM.png');
 	} else if (platform === 'FACEBOOK') {
-		return staticFile('/FacebookIcon.png');
+		return staticFile('/FACEBOOK.png');
+	} else if (platform === 'TIKTOK') {
+		return staticFile('/TIKTOKT.png');
+	} else if (platform === 'LINKEDIN') {
+		return staticFile('/LINKEDIN.png');
 	} else {
-		return staticFile('/YoutubeIcon.png');
+		return staticFile('/YOUTUBE.png');
 	}
 }

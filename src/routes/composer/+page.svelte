@@ -35,6 +35,7 @@
 	let isRendering = $state(false);
 	let renderProgress = $state(0);
 	let renderStatus = $state('Ready to render');
+	let videoFilename = $derived<string>($uploadedCsvFile?.name.trim().split('.')[0] || 'Video.mp4');
 
 	$effect(() => {
 		if ($timelineDurationInFrames > 0) {
@@ -257,8 +258,9 @@
 					EndTime: video.EndTime,
 					fps: metadata.fps,
 					BeginFrame: parseTimeToSeconds(video.BeginTime) * metadata.fps,
-					EndFrame: parseTimeToSeconds(video.EndTime) * metadata.fps
-				}; //Here we actually amplify the videodata
+					EndFrame: parseTimeToSeconds(video.EndTime) * metadata.fps,
+					originalVideoTitle: $uploadedCsvFile?.name.trim().split('.')[0]
+				};
 			})
 		);
 	}
@@ -292,7 +294,7 @@
 
 			// Step 2: Generate video using the videos with server paths
 			renderStatus = 'Starting render...';
-			const filename = `master-video.mp4`;
+			const filename = videoFilename || 'RenderedVideo.mp4';
 			const blob = await generateVideo(renderReadyVideos);
 
 			renderedVideo.set([{ filename, blob }]);
@@ -404,6 +406,16 @@
 			<p class="title">Video options</p>
 			<div class="flex v mediumgap">
 				<div class="flex v minigap">
+					<label for="filename"><p class="microtitle">Video filename:</p></label>
+					<input
+						type="text"
+						placeholder="Video.mp4"
+						class="annotation"
+						id="filename"
+						bind:value={videoFilename}
+					/>
+				</div>
+				<div class="flex v minigap">
 					<p class="microtitle">Render quality:</p>
 					<p class="annotation">HD</p>
 				</div>
@@ -438,7 +450,7 @@
 	<div class="player_console flex v" id="remotion_player_container">
 		<div class="flex h spacebetween" style="padding: 0 5px;">
 			<p class="annotation">
-				{$uploadedCsvFile?.name.trim().split('.')[0]}
+				{videoFilename}
 			</p>
 		</div>
 		{#key finalVideoDataset}
@@ -450,7 +462,7 @@
 			{/each}
 		</div>
 	</div>
-	<div class="flex v mediumgap" id="alert_container" style="overflow: hidden;">
+	<div class="flex v mediumgap" id="alert_container">
 		<p class="title">Render status</p>
 		<div class="flex v minigap">
 			{@render renderChip(
@@ -506,8 +518,14 @@
 			</button>
 
 			<div class="flex v minigap">
-				<p class="annotation">{filename || 'Your render video name'}</p>
-				<p class="microtitle">{size + ' MB' || '0 MB For now'}</p>
+				<input
+					type="text"
+					placeholder="Video.mp4"
+					class="annotation"
+					bind:value={videoFilename}
+					style="width: 100%;"
+				/>
+				<p class="microtitle">{Math.ceil(size / 1024 / 1024) + ' MB' || '0 MB For now'}</p>
 			</div>
 
 			{#if state === 'success'}
@@ -537,7 +555,7 @@
 			height: fit-content;
 			border: 1px solid #d6d6d6;
 			background-color: #fff;
-			padding: 5px 5px 5px 5px;
+			padding: 5px 15px 5px 5px;
 			border-radius: 15px;
 			position: relative;
 			overflow: visible;

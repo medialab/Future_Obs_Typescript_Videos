@@ -6,7 +6,7 @@ export type VideoData = {
 	Comment_authors?: string;
 	Comments?: string;
 	Post_author: string;
-	Platform: 'YOUTUBE' | 'TIKTOK' | 'INSTAGRAM' | 'FACEBOOK' | 'OTHER';
+	Platform: 'YOUTUBE' | 'TIKTOK' | 'INSTAGRAM' | 'FACEBOOK' | 'LINKEDIN' | 'OTHER';
 	videoSrc: string;
 	videoSrcPath: string;
 	renderSrc: string;
@@ -17,6 +17,7 @@ export type VideoData = {
 	EndTime: string;
 	EndFrame?: number;
 	fps: number;
+	originalVideoTitle: string;
 };
 
 export type RenderedVideo = {

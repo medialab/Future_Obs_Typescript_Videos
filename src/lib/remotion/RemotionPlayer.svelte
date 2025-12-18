@@ -52,7 +52,7 @@
 					compositionHeight: 1080,
 					fps: 25,
 					controls: true,
-					clickToPlay: true,
+					clickToPlay: false,
 					loop: false,
 					autoPlay: false,
 					inputProps: {
@@ -93,11 +93,6 @@
 		bind:this={container}
 		role="application"
 		aria-label="Video player"
-		onpointerdown={(e) => {
-			e.stopPropagation();
-			$currentFrame = (playerRef.current as PlayerRef)?.getCurrentFrame() || 0;
-			console.log('current frame is ' + $currentFrame);
-		}}
 	></div>
 {:else}
 	<div class="remotion-player loading flex v centered">Loading video segments...</div>
@@ -111,7 +106,7 @@
 		border: 1px dashed #c6c6c6;
 		overflow: hidden;
 		border-radius: 17px;
-		background-color: white;
+		background-color: #282828;
 		/* Modern browsers with aspect-ratio support */
 		aspect-ratio: 16/9;
 		height: auto;
