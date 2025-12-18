@@ -1,15 +1,8 @@
-import {
-	AbsoluteFill,
-	Img,
-	Sequence,
-	OffthreadVideo,
-	staticFile,
-	useCurrentFrame,
-	interpolate
-} from 'remotion';
+import { AbsoluteFill, Img, Sequence, OffthreadVideo, staticFile, useCurrentFrame } from 'remotion';
 import React from 'react';
 import { parseTimeToSeconds } from '$lib/utils';
 import type { VideoData } from '$lib/types';
+import { FadeOpacity, fadeAudioVolume } from './transitions';
 
 export const SingleVideoComp: React.FC<{
 	data: VideoData;
@@ -33,24 +26,6 @@ export const SingleVideoComp: React.FC<{
 	const frame = useCurrentFrame();
 
 	// Helper function for fade in/out opacity
-	const getFadeOpacity = (sequenceStartFrame: number, sequenceDuration: number) => {
-		const fadeFrames = 30; // Frames for fade in/out
-		const sequenceFrame = frame - sequenceStartFrame;
-
-		if (sequenceFrame < fadeFrames) {
-			return interpolate(sequenceFrame, [0, fadeFrames], [0, 1], {
-				extrapolateRight: 'clamp',
-				easing: (t) => t * t * (3 - 2 * t) // Smooth cubic ease-in-out curve
-			});
-		} else if (sequenceFrame > sequenceDuration - fadeFrames) {
-			return interpolate(sequenceFrame, [sequenceDuration - fadeFrames, sequenceDuration], [1, 0], {
-				extrapolateRight: 'clamp',
-				easing: (t) => t * t * (3 - 2 * t) // Smooth cubic ease-in-out curve
-			});
-		} else {
-			return 1;
-		}
-	};
 
 	if (!data) {
 		return null;
@@ -110,7 +85,7 @@ export const SingleVideoComp: React.FC<{
 					height: videoHeight,
 					overflow: 'hidden',
 					zIndex: -11,
-					opacity: getFadeOpacity(0, clipDurationFrames)
+					opacity: FadeOpacity(frame, 0, clipDurationFrames)
 				}}
 			>
 				<OffthreadVideo
@@ -119,7 +94,7 @@ export const SingleVideoComp: React.FC<{
 					trimAfter={endTimeSeconds * fps}
 					style={{ width: '100%', height: '100%', objectFit: 'cover' }}
 					muted={false}
-					volume={getFadeOpacity(0, clipDurationFrames)}
+					volume={fadeAudioVolume(frame, 0, clipDurationFrames)}
 				/>
 			</div>
 
@@ -134,7 +109,7 @@ export const SingleVideoComp: React.FC<{
 						color: 'black',
 						textAlign: 'left' as const,
 						zIndex: 3,
-						opacity: getFadeOpacity(0, clipDurationFrames)
+						opacity: FadeOpacity(frame, 0, clipDurationFrames)
 					}}
 				>
 					{data.Location}
@@ -152,7 +127,7 @@ export const SingleVideoComp: React.FC<{
 						color: 'black',
 						textAlign: 'right' as const,
 						zIndex: 3,
-						opacity: getFadeOpacity(0, clipDurationFrames)
+						opacity: FadeOpacity(frame, 0, clipDurationFrames)
 					}}
 				>
 					{data.Date}
@@ -185,7 +160,7 @@ export const SingleVideoComp: React.FC<{
 						textOverflow: 'ellipsis',
 						// Fallback for older browsers
 						maxHeight: '2.4em',
-						opacity: getFadeOpacity(0, clipDurationFrames)
+						opacity: FadeOpacity(frame, 0, clipDurationFrames)
 					}}
 				>
 					{data.Title}
@@ -203,7 +178,7 @@ export const SingleVideoComp: React.FC<{
 						color: 'black',
 						textAlign: 'left' as const,
 						zIndex: 3,
-						opacity: getFadeOpacity(0, clipDurationFrames)
+						opacity: FadeOpacity(frame, 0, clipDurationFrames)
 					}}
 				>
 					{data.Post_author}
@@ -220,7 +195,7 @@ export const SingleVideoComp: React.FC<{
 					width: 50,
 					height: 'auto',
 					zIndex: 3,
-					opacity: getFadeOpacity(0, clipDurationFrames)
+					opacity: FadeOpacity(frame, 0, clipDurationFrames)
 				}}
 			/>
 
@@ -240,7 +215,7 @@ export const SingleVideoComp: React.FC<{
 								top: `${canvasHeight / 3.5}px`,
 								fontSize: 35,
 								color: 'white',
-								opacity: 0.5 * getFadeOpacity(sequenceStart, singleCommentDuration),
+								opacity: 0.5 * FadeOpacity(frame, sequenceStart, singleCommentDuration),
 								maxWidth: '25ch',
 								whiteSpace: 'wrap',
 								fontStyle: 'italic',
@@ -275,7 +250,7 @@ export const SingleVideoComp: React.FC<{
 								whiteSpace: 'wrap',
 								lineHeight: 1.2,
 								zIndex: 3,
-								opacity: getFadeOpacity(sequenceStart, singleCommentDuration)
+								opacity: FadeOpacity(frame, sequenceStart, singleCommentDuration)
 							}}
 						>
 							{comment}

@@ -3,6 +3,7 @@ import React from 'react';
 import { SingleVideoComp } from './SingleVideoComp';
 import type { VideoData } from '$lib/types';
 import { Audio } from '@remotion/media';
+import { fadeAudioVolume } from './transitions';
 
 const INTRO_UNIQUE_DURATION = 80;
 
@@ -15,36 +16,6 @@ export const MasterComposition: React.FC<MasterCompositionProps> = ({ segments }
 	const frame = useCurrentFrame();
 
 	// Helper function for audio fade in/out
-	const getAudioVolume = (
-		sequenceStartFrame: number,
-		sequenceDuration: number,
-		maxVolume: number = 0.2
-	) => {
-		const fadeFrames = 15; // Frames for audio fade in/out
-		const sequenceFrame = frame - sequenceStartFrame;
-
-		if (sequenceFrame < fadeFrames) {
-			// Fade in
-			return interpolate(sequenceFrame, [0, fadeFrames], [0, maxVolume], {
-				extrapolateRight: 'clamp',
-				easing: (t) => t * t * (3 - 2 * t) // Smooth cubic ease-in-out
-			});
-		} else if (sequenceFrame > sequenceDuration - fadeFrames) {
-			// Fade out
-			return interpolate(
-				sequenceFrame,
-				[sequenceDuration - fadeFrames, sequenceDuration],
-				[maxVolume, 0],
-				{
-					extrapolateRight: 'clamp',
-					easing: (t) => t * t * (3 - 2 * t) // Smooth cubic ease-in-out
-				}
-			);
-		} else {
-			// Full volume in middle
-			return maxVolume;
-		}
-	};
 
 	if (segments.length === 0) {
 		return null;
@@ -91,7 +62,7 @@ export const MasterComposition: React.FC<MasterCompositionProps> = ({ segments }
 				<AbsoluteFill style={{ backgroundColor: '#262626', zIndex: 2 }} />
 				<Audio
 					src={staticFile('INTRO_AUDIO.mp3')}
-					volume={getAudioVolume(0, INTRO_UNIQUE_DURATION * 3, 0.2)}
+					volume={fadeAudioVolume(frame, 0, INTRO_UNIQUE_DURATION * 3, 0.2)}
 				/>
 			</Sequence>
 			{segments.map((segment, index) => (
