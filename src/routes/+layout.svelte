@@ -129,7 +129,7 @@
 	:global(.main_grid) {
 		display: grid;
 		grid-template-columns: repeat(11, 1fr);
-		gap: 50px;
+		gap: 20px;
 		padding: 20px;
 		height: 100%;
 		width: 100%;

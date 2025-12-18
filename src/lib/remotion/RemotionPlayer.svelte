@@ -13,9 +13,6 @@
 
 	let props = $props<{
 		segments: VideoData[];
-		controls: boolean;
-		loop: boolean;
-		autoPlay: boolean;
 	}>();
 
 	$effect(() => {
@@ -54,7 +51,7 @@
 					compositionWidth: 1920,
 					compositionHeight: 1080,
 					fps: 25,
-					controls: props.controls,
+					controls: true,
 					clickToPlay: true,
 					loop: false,
 					autoPlay: false,
@@ -103,7 +100,7 @@
 		}}
 	></div>
 {:else}
-	<div class="remotion-player loading">Loading video segments...</div>
+	<div class="remotion-player loading flex v centered">Loading video segments...</div>
 {/if}
 
 <style>
@@ -118,6 +115,10 @@
 		/* Modern browsers with aspect-ratio support */
 		aspect-ratio: 16/9;
 		height: auto;
+	}
+
+	.loading {
+		width: 100%;
 	}
 
 	/* Fallback for browsers that don't support aspect-ratio (Safari < 15.4) */

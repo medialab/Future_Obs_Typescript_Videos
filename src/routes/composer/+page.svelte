@@ -30,17 +30,16 @@
 	// Types
 	import type { VideoData, RenderVideoData, RenderedVideo } from '$lib/types';
 
-	let finalVideoDataset = $state<any[]>([]);
+	let finalVideoDataset = $state<VideoData[]>([]);
 	let chipStatus = $state<'pending' | 'rendering' | 'success' | 'error'>('pending');
 	let isRendering = $state(false);
 	let renderProgress = $state(0);
 	let renderStatus = $state('Ready to render');
 
 	$effect(() => {
-		const duration = $timelineDurationInFrames;
-		if (duration > 0) {
+		if ($timelineDurationInFrames > 0) {
 			const progressFraction = renderProgress / 100;
-			const newFrame = Math.round(progressFraction * duration);
+			const newFrame = Math.round(progressFraction * $timelineDurationInFrames);
 			currentFrame.set(newFrame);
 		} else {
 			currentFrame.set(0);
@@ -356,7 +355,7 @@
 				sum +
 				(typeof (v as any).durationInFrames === 'number'
 					? (v as any).durationInFrames
-					: (v.duration || 0) * ((v as any).fps ?? 25)),
+					: (v.durationInFrames || 0) * ((v as any).fps ?? 25)),
 			0
 		)}
 	{@const endFrame =
@@ -442,8 +441,8 @@
 				{$uploadedCsvFile?.name.trim().split('.')[0]}
 			</p>
 		</div>
-		{#key finalVideoDataset && $uploadedVideoFiles && $uploadedCsvFile}
-			<RemotionPlayer segments={finalVideoDataset} controls={true} loop={false} autoPlay={false} />
+		{#key finalVideoDataset}
+			<RemotionPlayer segments={finalVideoDataset} />
 		{/key}
 		<div class="timeline flex h minigap">
 			{#each finalVideoDataset as v, index}

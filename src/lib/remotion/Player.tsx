@@ -10,9 +10,6 @@ export type RemotionPlayerProps = {
 	timelineDurationInFrames: number;
 	width?: number;
 	height?: number;
-	controls?: boolean;
-	loop?: boolean;
-	autoPlay?: boolean;
 };
 
 export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
@@ -34,8 +31,7 @@ export const RemotionPlayer: React.FC<RemotionPlayerProps> = ({
 			autoPlay={false}
 			inputProps={{
 				data: videoData,
-				videoSrc,
-				durationInFrames: timelineDurationInFrames
+				videoSrc
 			}}
 			style={{
 				width,

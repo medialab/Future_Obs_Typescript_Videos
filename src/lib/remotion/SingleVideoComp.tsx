@@ -6,10 +6,8 @@ import type { VideoData } from '$lib/types';
 export const SingleVideoComp: React.FC<{
 	data: VideoData;
 	videoSrc?: string;
-	duration?: number;
-	durationInFrames?: number;
 	isRendering?: boolean;
-}> = ({ data, videoSrc, duration, durationInFrames, isRendering }) => {
+}> = ({ data, videoSrc, isRendering }) => {
 	const canvasHeight = 1080;
 	const videoWidth = 1200;
 	const videoHeight = videoWidth * (9 / 16) + 25;
@@ -23,14 +21,7 @@ export const SingleVideoComp: React.FC<{
 	const trimmedDuration = endTimeSeconds - beginTimeSeconds;
 	const trimmedDurationFrames = Math.ceil(trimmedDuration * fps);
 
-	const clipDurationFrames =
-		trimmedDurationFrames > 0
-			? trimmedDurationFrames
-			: typeof data.durationInFrames === 'number'
-				? data.durationInFrames
-				: typeof durationInFrames === 'number'
-					? durationInFrames
-					: Math.ceil((duration ?? 0) * fps);
+	const clipDurationFrames = trimmedDurationFrames;
 
 	if (!data) {
 		return null;

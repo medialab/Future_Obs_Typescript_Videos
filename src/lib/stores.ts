@@ -11,6 +11,7 @@ export let uploadedCsvFile = writable<File | undefined>(undefined);
 export let unknownFiles = writable<string[]>([]);
 export let currentFrame = writable<number>(0);
 export let timelineDurationInFrames = writable<number>(0);
+export let isStorageSaving = writable<boolean>(false);
 
 if (browser) {
 	loadFiles()
@@ -29,19 +30,33 @@ if (browser) {
 				uploadedCsvFile.set(file);
 			}
 		})
+		.then(() => {
+			isStorageSaving.set(false);
+		})
 		.catch((err) => {
 			console.error('Error loading CSV from IndexedDB:', err);
 		});
 
 	uploadedVideoFiles.subscribe((files) => {
-		saveFiles(files).catch((err) => {
-			console.error('Error saving files to IndexedDB:', err);
-		});
+		isStorageSaving.set(true);
+		saveFiles(files)
+			.catch((err) => {
+				isStorageSaving.set(false);
+				console.error('Error saving files to IndexedDB:', err);
+			})
+			.then(() => {
+				isStorageSaving.set(false);
+			});
 	});
 
 	uploadedCsvFile.subscribe((file) => {
-		saveCsvFile(file).catch((err) => {
-			console.error('Error saving CSV to IndexedDB:', err);
-		});
+		isStorageSaving.set(true);
+		saveCsvFile(file)
+			.catch((err) => {
+				console.error('Error saving CSV to IndexedDB:', err);
+			})
+			.then(() => {
+				isStorageSaving.set(false);
+			});
 	});
 }

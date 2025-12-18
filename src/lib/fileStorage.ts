@@ -1,5 +1,5 @@
 // IndexedDB utility for storing File objects persistently
-import type { RenderedVideo } from './stores';
+import type { RenderedVideo } from './types';
 
 const DB_NAME = 'videoFilesDB';
 const DB_VERSION = 2; // Increment from 1 to 2 to trigger upgrade
@@ -166,14 +166,14 @@ export async function clearFile(filename: string): Promise<void> {
 
 // Save array of File objects to IndexedDB
 export async function saveFiles(files: File[]): Promise<void> {
+	console.log('[saveFiles] Starting to save files:', files);
+
 	const database = await initDB();
 	const transaction = database.transaction([STORE_NAME], 'readwrite');
 	const store = transaction.objectStore(STORE_NAME);
 
-	// Clear existing files first
-	await store.clear();
+	store.clear();
 
-	// Save new files
 	const savePromises = files.map((file) => {
 		return new Promise<void>((resolve, reject) => {
 			const request = store.put({
@@ -188,10 +188,13 @@ export async function saveFiles(files: File[]): Promise<void> {
 		});
 	});
 
+	console.log('[saveFiles] Saving files:', savePromises);
+
 	await Promise.all(savePromises);
 }
 
 export async function loadFiles(): Promise<File[]> {
+	console.log('[loadFiles] Starting to load files');
 	const database = await initDB();
 	const transaction = database.transaction([STORE_NAME], 'readonly');
 	const store = transaction.objectStore(STORE_NAME);
@@ -208,6 +211,7 @@ export async function loadFiles(): Promise<File[]> {
 
 // Clear all files from IndexedDB
 export async function clearFiles(): Promise<void> {
+	console.log('[clearFiles] Starting to clear files');
 	const database = await initDB();
 	const transaction = database.transaction([STORE_NAME], 'readwrite');
 	const store = transaction.objectStore(STORE_NAME);
@@ -220,6 +224,7 @@ export async function clearFiles(): Promise<void> {
 }
 
 export async function storeRenderedVideo(video: RenderedVideo): Promise<void> {
+	console.log('[storeRenderedVideo] Starting to store rendered video:', video);
 	const database = await initDB();
 
 	// Check if store exists, if not, we need to upgrade
@@ -245,6 +250,7 @@ export async function storeRenderedVideo(video: RenderedVideo): Promise<void> {
 
 // Save CSV file to IndexedDB
 export async function saveCsvFile(file: File | undefined): Promise<void> {
+	console.log('[saveCsvFile] Starting to save CSV file:', file);
 	const database = await initDB();
 	const transaction = database.transaction([CSV_STORE_NAME], 'readwrite');
 	const store = transaction.objectStore(CSV_STORE_NAME);
@@ -272,6 +278,7 @@ export async function saveCsvFile(file: File | undefined): Promise<void> {
 
 // Load CSV file from IndexedDB
 export async function loadCsvFile(): Promise<File | undefined> {
+	console.log('[loadCsvFile] Starting to load CSV file');
 	const database = await initDB();
 	const transaction = database.transaction([CSV_STORE_NAME], 'readonly');
 	const store = transaction.objectStore(CSV_STORE_NAME);
@@ -288,6 +295,7 @@ export async function loadCsvFile(): Promise<File | undefined> {
 
 // Load rendered video from IndexedDB
 export async function loadRenderedVideo(): Promise<RenderedVideo | undefined> {
+	console.log('[loadRenderedVideo] Starting to load rendered video');
 	const database = await initDB();
 
 	// Check if the store exists

@@ -14,7 +14,8 @@
 		uploadedVideoFiles,
 		missingFilenames,
 		uploadedCsvFile,
-		unknownFiles
+		unknownFiles,
+		isStorageSaving
 	} from '$lib/stores';
 	import { extractCsvData, isValidCsvFile } from '$lib/tableUtils';
 	import { untrack } from 'svelte';
@@ -334,6 +335,7 @@
 			<button
 				class="flex h minigap success centered"
 				class:disabled={$missingFilenames.length !== 0 ||
+					$isStorageSaving ||
 					!$uploadedCsvFile ||
 					$uploadedVideoFiles.length === 0}
 			>

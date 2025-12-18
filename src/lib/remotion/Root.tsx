@@ -10,10 +10,15 @@ const calculateMetadata: CalculateMetadataFunction<MasterCompositionProps> = ({ 
 
 	// Calculate total duration from segments (already in frames when provided)
 	const durationInFrames = props.segments.reduce((sum, segment) => {
-		if (typeof (segment as any).durationInFrames === 'number') {
-			return sum + (segment as any).durationInFrames;
-		}
-		return sum + Math.ceil((segment.duration || 0) * (segment.fps ?? fps));
+		const frames =
+			typeof (segment as any).durationInFrames === 'number'
+				? (segment as any).durationInFrames
+				: typeof (segment as any).BeginFrame === 'number' &&
+					  typeof (segment as any).EndFrame === 'number'
+					? Math.max(0, (segment as any).EndFrame - (segment as any).BeginFrame)
+					: 0;
+
+		return sum + Math.round(frames);
 	}, 0);
 
 	return {
