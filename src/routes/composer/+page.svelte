@@ -4,6 +4,7 @@
 	import successIcon from '$lib/assets/icons/success.svg';
 	import errorIcon from '$lib/assets/icons/error.svg';
 	import trashIcon from '$lib/assets/icons/trash.svg';
+	import { getAudioData } from '@remotion/media-utils';
 
 	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
@@ -14,8 +15,13 @@
 		uploadedVideoFiles,
 		uploadedCsvFile,
 		timelineDurationInFrames,
-		currentFrame
+		currentFrame,
+		renderingMode
 	} from '$lib/stores';
+
+	// CSR Rendering
+	import { renderWithCSR, isCSRSupported, getCSRCapabilities } from '$lib/rendering/csrRenderer';
+	import type { RenderingMode } from '$lib/rendering/types';
 
 	// Components
 	import Header from '$lib/components/header.svelte';
@@ -37,6 +43,17 @@
 	let renderStatus = $state('Ready to render');
 	let videoFilename = $derived<string>($uploadedCsvFile?.name.trim().split('.')[0] || 'Video.mp4');
 
+	// CSR Support detection
+	let csrSupported = $state(false);
+	let csrCapabilities = $state<ReturnType<typeof getCSRCapabilities> | null>(null);
+
+	$effect(() => {
+		if (browser) {
+			csrSupported = isCSRSupported();
+			csrCapabilities = getCSRCapabilities();
+		}
+	});
+
 	$effect(() => {
 		if ($timelineDurationInFrames > 0) {
 			const progressFraction = renderProgress / 100;
@@ -49,14 +66,11 @@
 
 	$inspect('Render status :', renderStatus);
 
-	async function generateVideo(videos: RenderVideoData[]) {
+	async function generateVideoWithFiles(formData: FormData) {
 		return new Promise<Blob>((resolve, reject) => {
 			fetch('/composer/api/videos', {
 				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({ videos })
+				body: formData
 			})
 				.then(async (response) => {
 					if (!response.ok) {
@@ -142,52 +156,22 @@
 		});
 	}
 
-	async function uploadVideosForRendering(videos: VideoData[]): Promise<RenderVideoData[]> {
-		const formData = new FormData();
+	/*const getLoudness = async (blobUrl: string): Promise<number> => {
+		const audioData = await getAudioData(blobUrl);
 
-		formData.append('videos', JSON.stringify(videos));
+		let medianLoudness =
+			(calculateRMS(audioData.channelWaveforms[0]) + calculateRMS(audioData.channelWaveforms[1])) /
+			2;
+		console.log('Audio medianLoudness:', medianLoudness, 'for', blobUrl);
 
-		for (const video of videos) {
-			const clipName = (video as any).ClipName?.trim();
-			if (!clipName) {
-				console.warn('Video missing ClipName, skipping:', video);
-				continue;
-			}
-
-			const matchingFile: File | undefined = $uploadedVideoFiles.find(
-				(f) => f.name.replace(/\.(mp4|mov|avi|mkv)$/i, '') === clipName
-			);
-
-			if (matchingFile) {
-				const blobLike = matchingFile as File | Blob;
-				const fileToSend =
-					blobLike instanceof File
-						? blobLike
-						: new File([blobLike], (blobLike as any).name ?? `${clipName}.mp4`, {
-								type: (blobLike as any).type ?? 'video/mp4',
-								lastModified: (blobLike as any).lastModified ?? Date.now()
-							});
-
-				formData.append('files', fileToSend);
-			} else {
-				console.warn(`No matching file found for ClipName: ${clipName}`);
-			}
+		if (isNaN(medianLoudness)) {
+			console.error('Error getting loudness:', medianLoudness, 'for', blobUrl);
+			medianLoudness = -24;
+			throw console.error('Error getting loudness:', medianLoudness, 'for', blobUrl);
 		}
 
-		const response = await fetch('/composer/api/upload', {
-			method: 'POST',
-			body: formData
-		});
-
-		if (!response.ok) {
-			const errorText = await response.text();
-			throw new Error(`Failed to upload videos: ${response.statusText} - ${errorText}`);
-		}
-
-		const { videos: updatedVideos } = await response.json();
-		console.log('Uploaded videos:', videos);
-		return updatedVideos as RenderVideoData[];
-	}
+		return medianLoudness;
+	};*/
 
 	$effect(() => {
 		//We update the final dataset reactively
@@ -225,7 +209,7 @@
 
 				const f: VideoData[] = await amplifyVideoData(json.data);
 
-				finalVideoDataset = f; //Here we consolidate the final dataset we use
+				finalVideoDataset = f;
 
 				console.log('Final video dataset:', finalVideoDataset);
 			} catch (error) {
@@ -234,6 +218,16 @@
 		})();
 	});
 
+	function calculateRMS(waveform: Float32Array, startSample = 0, length?: number): number {
+		const samples = length ? waveform.slice(startSample, startSample + length) : waveform;
+		const sum = samples.reduce((acc, val) => acc + val * val, 0);
+		const rms = Math.sqrt(sum / samples.length);
+		return 20 * Math.log10(Math.max(rms, 0.00001)); // Convert to dBFS
+	}
+
+	const DEFAULT_FPS = 24;
+	const MIN_VALID_FPS = 10;
+
 	async function amplifyVideoData(data: any[]): Promise<VideoData[]> {
 		return Promise.all(
 			data.map(async (video) => {
@@ -241,64 +235,148 @@
 
 				const metadata = await parseMedia({
 					src: videoSrc,
-					fields: { fps: true, dimensions: true }
+					fields: { fps: true, dimensions: true, audioCodec: true }
 				});
 
-				if (!metadata.fps) {
-					throw console.error('FPS not found for video: ', video.ClipName);
+				let fps = DEFAULT_FPS;
+				if (metadata.fps && metadata.fps >= MIN_VALID_FPS) {
+					fps = metadata.fps;
+				} else {
+					console.warn(
+						`Abnormal fps (${metadata.fps}) for video: ${video.ClipName}, using default ${DEFAULT_FPS}fps`
+					);
 				}
+
+				// Check if video has audio track
+				const hasAudio = metadata.audioCodec !== null && metadata.audioCodec !== undefined;
+
+				//const loudness = await getLoudness(videoSrc);
 
 				return {
 					...video,
 					videoSrc,
 					durationInFrames: Math.ceil(
-						(parseTimeToSeconds(video.EndTime) - parseTimeToSeconds(video.BeginTime)) * metadata.fps
+						(parseTimeToSeconds(video.EndTime) - parseTimeToSeconds(video.BeginTime)) * fps
 					),
 					BeginTime: video.BeginTime,
 					EndTime: video.EndTime,
-					fps: metadata.fps,
-					BeginFrame: parseTimeToSeconds(video.BeginTime) * metadata.fps,
-					EndFrame: parseTimeToSeconds(video.EndTime) * metadata.fps,
-					originalVideoTitle: $uploadedCsvFile?.name.trim().split('.')[0]
+					fps,
+					BeginFrame: parseTimeToSeconds(video.BeginTime) * fps,
+					EndFrame: parseTimeToSeconds(video.EndTime) * fps,
+					originalVideoTitle: $uploadedCsvFile?.name.trim().split('.')[0],
+					hasAudio
+					//loudness: loudness
 				};
 			})
 		);
 	}
 
+	/**
+	 * Render using Server-Side Rendering (SSR)
+	 * Uses @remotion/renderer with FFmpeg on server
+	 */
+	async function renderWithSSR(): Promise<Blob> {
+		renderStatus = 'Preparing videos for SSR...';
+		const formData = new FormData();
+		formData.append('videos', JSON.stringify(finalVideoDataset));
+
+		// Add video files from IndexedDB
+		for (const video of finalVideoDataset) {
+			const clipName = (video as any).ClipName?.trim();
+			if (!clipName) {
+				console.warn('Video missing ClipName, skipping:', video);
+				continue;
+			}
+
+			const matchingFile: File | undefined = $uploadedVideoFiles.find(
+				(f) => f.name.replace(/\.(mp4|mov|avi|mkv)$/i, '') === clipName
+			);
+
+			if (matchingFile) {
+				formData.append('files', matchingFile);
+			} else {
+				console.warn(`No matching file found for ClipName: ${clipName}`);
+			}
+		}
+
+		renderStatus = 'Starting SSR render...';
+		return await generateVideoWithFiles(formData);
+	}
+
+	/**
+	 * Render using Client-Side Rendering (CSR)
+	 * Uses @remotion/web-renderer with WebCodecs in browser
+	 */
+	async function renderWithCSRMode(): Promise<Blob> {
+		renderStatus = 'Starting CSR render...';
+
+		const result = await renderWithCSR({
+			segments: finalVideoDataset,
+			fps: 25,
+			width: 1920,
+			height: 1080,
+			onProgress: (progress) => {
+				renderProgress = (progress.renderedPercent + progress.encodedPercent) / 2;
+			},
+			onStatus: (message) => {
+				renderStatus = message;
+			}
+		});
+
+		return result.blob;
+	}
+
 	async function renderAllVideos() {
 		isRendering = true;
 		renderedVideo.set([{ filename: '', blob: undefined }]);
-		renderStatus = 'Uploading videos...';
+		renderStatus = 'Initializing...';
 		chipStatus = 'rendering';
+		renderProgress = 0;
+
+		const currentMode = $renderingMode;
+
+		// Clear console logging for render mode
+		console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #6b74c4');
+		if (currentMode === 'csr') {
+			console.log(
+				'%c🌐 RENDERING MODE: CSR (Client-Side Rendering)',
+				'color: #ff9800; font-weight: bold; font-size: 14px'
+			);
+			console.log('%c   Using: @remotion/web-renderer + WebCodecs', 'color: #ff9800');
+			console.log('%c   Location: Browser (no server required)', 'color: #ff9800');
+		} else {
+			console.log(
+				'%c🖥️ RENDERING MODE: SSR (Server-Side Rendering)',
+				'color: #4caf50; font-weight: bold; font-size: 14px'
+			);
+			console.log('%c   Using: @remotion/renderer + FFmpeg', 'color: #4caf50');
+			console.log('%c   Location: Server-side processing', 'color: #4caf50');
+		}
+		console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #6b74c4');
+
 		try {
-			renderStatus = 'Uploading videos to server...';
-			const videosWithServerPaths = await uploadVideosForRendering(finalVideoDataset);
-			console.log('Videos uploaded, server paths:', videosWithServerPaths);
-
-			const assetOrigin =
-				typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
-
-			const renderReadyVideos = videosWithServerPaths.map((video) => {
-				const normalized = video.videoSrc?.startsWith('/')
-					? `${assetOrigin}${video.videoSrc}`
-					: video.videoSrc
-						? `${assetOrigin}/${video.videoSrc}`
-						: video.renderSrc;
-
-				return {
-					...video,
-					renderSrc: video.renderSrc || normalized,
-					isRendering: true
-				};
-			});
-
-			// Step 2: Generate video using the videos with server paths
-			renderStatus = 'Starting render...';
+			let blob: Blob;
 			const filename = videoFilename || 'RenderedVideo.mp4';
-			const blob = await generateVideo(renderReadyVideos);
+
+			if (currentMode === 'csr') {
+				// Client-Side Rendering
+				console.log('%c[CSR] Starting client-side render...', 'color: #ff9800');
+				if (!csrSupported) {
+					throw new Error(
+						'CSR is not supported in this browser. Please use SSR mode or update your browser.'
+					);
+				}
+				blob = await renderWithCSRMode();
+				console.log('%c[CSR] ✅ Render complete!', 'color: #ff9800; font-weight: bold');
+			} else {
+				// Server-Side Rendering (default)
+				console.log('%c[SSR] Starting server-side render...', 'color: #4caf50');
+				blob = await renderWithSSR();
+				console.log('%c[SSR] ✅ Render complete!', 'color: #4caf50; font-weight: bold');
+			}
 
 			renderedVideo.set([{ filename, blob }]);
-			renderStatus = 'Completed';
+			renderStatus = `Completed (${currentMode.toUpperCase()})`;
 			chipStatus = 'success';
 			isRendering = false;
 
@@ -309,10 +387,10 @@
 				console.error('Error storing rendered video:', error);
 			}
 		} catch (error) {
-			console.error(`Error rendering videos:`, error);
+			console.error(`Error rendering videos (${currentMode}):`, error);
 			renderStatus = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
-			isRendering = false;
 			chipStatus = 'error';
+			isRendering = false;
 		}
 	}
 
@@ -415,6 +493,43 @@
 						bind:value={videoFilename}
 					/>
 				</div>
+
+				<!-- Rendering Mode Toggle -->
+				<div class="flex v minigap">
+					<p class="microtitle">Render mode:</p>
+					<div class="render-mode-toggle">
+						<button
+							class="mode-btn"
+							class:active={$renderingMode === 'ssr'}
+							onclick={() => renderingMode.set('ssr')}
+							disabled={isRendering}
+						>
+							<span class="mode-label">SSR</span>
+							<span class="mode-desc">Server</span>
+						</button>
+						<button
+							class="mode-btn"
+							class:active={$renderingMode === 'csr'}
+							class:unsupported={!csrSupported}
+							onclick={() => {
+								if (csrSupported) {
+									renderingMode.set('csr');
+								}
+							}}
+							disabled={isRendering || !csrSupported}
+							title={!csrSupported
+								? 'WebCodecs not supported in this browser'
+								: 'Client-side rendering (experimental)'}
+						>
+							<span class="mode-label">CSR</span>
+							<span class="mode-desc">{csrSupported ? 'Browser' : 'N/A'}</span>
+						</button>
+					</div>
+					{#if $renderingMode === 'csr'}
+						<p class="annotation warning-text">⚠️ Experimental - Limited features</p>
+					{/if}
+				</div>
+
 				<div class="flex v minigap">
 					<p class="microtitle">Render quality:</p>
 					<p class="annotation">HD</p>
@@ -425,7 +540,7 @@
 				</div>
 				<div class="flex v minigap">
 					<p class="microtitle">Audio normalization:</p>
-					<p class="annotation">Yes</p>
+					<p class="annotation">{$renderingMode === 'ssr' ? 'Yes' : 'Limited'}</p>
 				</div>
 			</div>
 		</div>
@@ -675,5 +790,70 @@
 		border: 1px solid #d6d6d6;
 		padding: 5px;
 		overflow: hidden;
+	}
+
+	/* Rendering Mode Toggle Styles */
+	.render-mode-toggle {
+		display: flex;
+		gap: 4px;
+		background-color: #f2f2f2;
+		border: 1px solid #d6d6d6;
+		border-radius: 10px;
+		padding: 4px;
+		width: fit-content;
+	}
+
+	.mode-btn {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 8px 16px;
+		border: none;
+		border-radius: 8px;
+		background-color: transparent;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		min-width: 70px;
+	}
+
+	.mode-btn:hover:not(:disabled) {
+		background-color: #e5e5e5;
+	}
+
+	.mode-btn.active {
+		background-color: #6b74c4;
+		color: white;
+		box-shadow: 0 2px 4px rgba(107, 116, 196, 0.3);
+	}
+
+	.mode-btn:disabled {
+		cursor: not-allowed;
+		opacity: 0.5;
+	}
+
+	.mode-btn.unsupported {
+		opacity: 0.4;
+	}
+
+	.mode-label {
+		font-size: 14px;
+		font-weight: 600;
+		line-height: 1.2;
+	}
+
+	.mode-desc {
+		font-size: 10px;
+		opacity: 0.7;
+		line-height: 1.2;
+	}
+
+	.mode-btn.active .mode-desc {
+		opacity: 0.9;
+	}
+
+	.warning-text {
+		color: #dc9600;
+		font-size: 11px;
+		margin-top: 4px;
 	}
 </style>

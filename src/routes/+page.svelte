@@ -6,9 +6,9 @@
 	import Alert from '$lib/components/alerts.svelte';
 	import eraseIcon from '$lib/assets/icons/erase.svg';
 	import arrowIcon from '$lib/assets/icons/arrow.svg';
-	import Papa from 'papaparse';
 	import InputFile from '$lib/components/inputFile.svelte';
 	import trashIcon from '$lib/assets/icons/delete.svg';
+
 	import {
 		requiredFilenames,
 		uploadedVideoFiles,
@@ -23,6 +23,8 @@
 
 	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
+
+	let composeButtonStatus = $state<'run check' | 'checking' | 'ready' | 'failed'>('run check');
 
 	const clearQueue = async () => {
 		$uploadedVideoFiles = [];
@@ -130,7 +132,6 @@
 			$uploadedCsvFile = csvFiles[0];
 			requiredFilenames.set(await extractCsvData($uploadedCsvFile));
 		} else {
-			// Filter to only video files
 			const videoFiles = Array.from(files).filter(isValidVideoFile);
 
 			if (videoFiles.length === 0) {
@@ -139,7 +140,7 @@
 			}
 
 			const merged = [...$uploadedVideoFiles, ...videoFiles];
-			// keep unique by name to avoid duplicates from re-selecting same file
+
 			const seen = new Set<string>();
 			$uploadedVideoFiles = merged.filter((file) => {
 				if (seen.has(file.name)) return false;

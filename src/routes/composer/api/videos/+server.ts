@@ -5,9 +5,25 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { VideoData } from '$lib/types';
 import { mkdir, rm } from 'fs/promises';
-import { unlink } from 'fs/promises';
 import { error } from '@sveltejs/kit';
 import { existsSync } from 'fs';
+
+/**
+ * Simple audio validation - trusts the client-side hasAudio flag
+ * which was determined by @remotion/media-parser
+ *
+ * This is more reliable than trying to run ffprobe on temp URLs
+ */
+function logAudioStatus(videos: VideoData[]): void {
+	const withAudio = videos.filter((v) => v.hasAudio);
+	const withoutAudio = videos.filter((v) => !v.hasAudio);
+
+	console.log(`[Audio] ${withAudio.length} videos with audio, ${withoutAudio.length} without`);
+
+	if (withAudio.length > 0) {
+		console.log('[Audio] Videos with audio:', withAudio.map((v) => v.ClipName).join(', '));
+	}
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,36 +33,98 @@ const RENDERED_VIDEOS_DIR = path.join(process.cwd(), 'tmp/renders');
 export async function POST({ request }: RequestEvent) {
 	process.env.REMOTION_RENDERING = 'true';
 
-	const { videos } = await request.json();
+	// Handle both JSON and FormData (for video files)
+	let videos: any[];
+	let videoFiles: File[] = [];
+
+	if (request.headers.get('content-type')?.includes('multipart/form-data')) {
+		// New approach: videos come as FormData with files
+		const formData = await request.formData();
+		const videosJson = formData.get('videos') as string;
+		videos = JSON.parse(videosJson);
+		videoFiles = formData.getAll('files') as File[];
+	} else {
+		// Legacy approach: videos come as JSON
+		const data = await request.json();
+		videos = data.videos;
+	}
+
 	const origin = process.env.ASSET_ORIGIN ?? new URL(request.url).origin;
 
-	const videoFilePaths: string[] = (videos as VideoData[])
-		.map((video) => (video as any).videoSrcPath)
-		.filter((path): path is string => Boolean(path));
+	// Track temp files for cleanup
+	const tempFiles: Array<{ tempId: string; url: string }> = [];
 
-	const renderingVideos: VideoData[] = (videos as VideoData[]).map((video) => {
-		// Prefer absolute http(s) URL for renderer to download
-		const normalizedVideoSrc = video.videoSrc?.startsWith('/')
-			? `${origin}${video.videoSrc}`
-			: video.videoSrc
-				? `${origin}/${video.videoSrc}`
-				: undefined;
+	// Upload videos to temp URLs if files are provided
+	const videoFileMap = new Map<string, File>();
+	if (videoFiles.length > 0) {
+		videoFiles.forEach((file) => {
+			const nameWithoutExt = file.name.replace(/\.(mp4|mov|avi|mkv)$/i, '');
+			videoFileMap.set(nameWithoutExt, file);
+		});
+	}
 
-		const renderSrc = video.renderSrc || normalizedVideoSrc;
+	const renderingVideos: VideoData[] = await Promise.all(
+		videos.map(async (video) => {
+			let renderSrc: string;
 
-		if (!renderSrc) {
-			throw error(
-				400,
-				`Missing renderSrc/videoSrc for clip: ${(video as any).ClipName || 'unknown'}`
-			);
-		}
+			// If we have video files, upload them to temp URLs
+			if (videoFiles.length > 0) {
+				const clipName = (video as any).ClipName?.trim();
+				if (!clipName) {
+					throw error(400, `Missing ClipName for video`);
+				}
 
-		return {
-			...video,
-			renderSrc,
-			isRendering: true
-		};
-	});
+				const matchingFile = videoFileMap.get(clipName);
+				if (!matchingFile) {
+					throw error(400, `No matching file found for ClipName: ${clipName}`);
+				}
+
+				// Upload to temp URL
+				const formData = new FormData();
+				formData.append('video', matchingFile);
+
+				const uploadResponse = await fetch(`${origin}/composer/api/temp-upload`, {
+					method: 'POST',
+					body: formData
+				});
+
+				if (!uploadResponse.ok) {
+					throw error(500, `Failed to upload video ${clipName}`);
+				}
+
+				const uploadData = await uploadResponse.json();
+
+				renderSrc = uploadData.url.startsWith('http')
+					? uploadData.url
+					: uploadData.url.startsWith('/')
+						? `${origin}${uploadData.url}`
+						: `${origin}/${uploadData.url}`;
+				tempFiles.push({ tempId: uploadData.tempId, url: renderSrc });
+			} else {
+				// Legacy approach: use existing URLs
+				const normalizedVideoSrc = video.videoSrc?.startsWith('/')
+					? `${origin}${video.videoSrc}`
+					: video.videoSrc
+						? `${origin}/${video.videoSrc}`
+						: undefined;
+
+				renderSrc = video.renderSrc || normalizedVideoSrc;
+
+				if (!renderSrc) {
+					throw error(
+						400,
+						`Missing renderSrc/videoSrc for clip: ${(video as any).ClipName || 'unknown'}`
+					);
+				}
+			}
+
+			return {
+				...video,
+				renderSrc,
+				isRendering: true
+			};
+		})
+	);
 
 	const stream = new ReadableStream({
 		async start(controller) {
@@ -78,23 +156,32 @@ export async function POST({ request }: RequestEvent) {
 					}
 				}
 
-				// Clean up static/videos files
-				if (videoFilePaths.length > 0) {
+				// Clean up temp uploaded files
+				if (tempFiles.length > 0) {
 					try {
-						console.log('Cleaning up static/videos files:', videoFilePaths.length, 'files');
+						console.log('Cleaning up temp files:', tempFiles.length, 'files');
 						await Promise.all(
-							videoFilePaths.map(async (filePath) => {
+							tempFiles.map(async ({ tempId }) => {
 								try {
-									await unlink(filePath);
-									console.log('Deleted:', filePath);
-								} catch (fileError) {
-									console.error(`Error deleting file ${filePath}:`, fileError);
+									const deleteResponse = await fetch(
+										`${origin}/composer/api/temp-upload/${tempId}`,
+										{
+											method: 'DELETE'
+										}
+									);
+									if (deleteResponse.ok) {
+										console.log('Cleaned up temp file:', tempId);
+									} else {
+										console.warn('Failed to clean up temp file:', tempId);
+									}
+								} catch (deleteError) {
+									console.warn('Error cleaning up temp file:', tempId, deleteError);
 								}
 							})
 						);
-						console.log(`${videoFilePaths} files cleanup complete`);
+						console.log('Temp files cleanup complete');
 					} catch (cleanupError) {
-						console.error('Error cleaning up static/videos files:', cleanupError);
+						console.error('Error cleaning up temp files:', cleanupError);
 					}
 				}
 			};
@@ -102,7 +189,6 @@ export async function POST({ request }: RequestEvent) {
 			try {
 				sendMessage('status', { message: 'Starting bundling...' });
 
-				// Verify all video files exist and are accessible before starting render
 				sendMessage('status', { message: 'Verifying video files...' });
 				for (const video of renderingVideos) {
 					const videoUrl = video.renderSrc;
@@ -128,6 +214,11 @@ export async function POST({ request }: RequestEvent) {
 					}
 				}
 				sendMessage('status', { message: 'All video files verified' });
+
+				// Log audio status (trusting client-side detection from @remotion/media-parser)
+				sendMessage('status', { message: 'Checking audio tracks...' });
+				logAudioStatus(renderingVideos);
+				sendMessage('status', { message: 'Audio check complete' });
 
 				// Find project root by looking for package.json or svelte.config.js
 				let projectRoot = process.cwd();

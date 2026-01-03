@@ -16,8 +16,10 @@ export type VideoData = {
 	BeginFrame?: number;
 	EndTime: string;
 	EndFrame?: number;
-	fps: number;
+	fps?: number;
 	originalVideoTitle: string;
+	loudness?: number;
+	hasAudio?: boolean;
 };
 
 export type RenderedVideo = {

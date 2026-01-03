@@ -2,6 +2,7 @@ import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { loadFiles, saveFiles, loadCsvFile, saveCsvFile } from './fileStorage';
 import type { RenderedVideo } from './types';
+import type { RenderingMode } from './rendering/types';
 
 export let renderedVideo = writable<RenderedVideo[]>([{ filename: '', blob: undefined }]);
 export let requiredFilenames = writable<string[]>([]);
@@ -12,6 +13,13 @@ export let unknownFiles = writable<string[]>([]);
 export let currentFrame = writable<number>(0);
 export let timelineDurationInFrames = writable<number>(0);
 export let isStorageSaving = writable<boolean>(false);
+
+/**
+ * Rendering mode: 'ssr' (Server-Side Rendering) or 'csr' (Client-Side Rendering)
+ * - SSR: Uses @remotion/renderer with FFmpeg on server (default, full feature support)
+ * - CSR: Uses @remotion/web-renderer with WebCodecs in browser (experimental, limited features)
+ */
+export let renderingMode = writable<RenderingMode>('ssr');
 
 if (browser) {
 	loadFiles()

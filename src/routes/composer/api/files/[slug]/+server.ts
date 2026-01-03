@@ -9,6 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TMP_VIDEOS_DIR = path.join(process.cwd(), 'tmp/uploads');
 const RENDERED_VIDEOS_DIR = path.join(process.cwd(), 'tmp/renders');
+const TEMP_UPLOAD_DIR = path.join(process.cwd(), 'tmp/temp-uploads');
 const ASSET_EXT_RE = /\.(mp4|mov|mkv|avi)$/i;
 
 export const GET = async ({ params }: RequestEvent) => {
@@ -16,15 +17,34 @@ export const GET = async ({ params }: RequestEvent) => {
 		throw error(400, 'No slug provided');
 	}
 	try {
-		// Try rendered videos first, then uploads
-		let filepath = path.join(RENDERED_VIDEOS_DIR, params.slug);
+		let filepath: string;
 
-		if (!existsSync(filepath)) {
-			filepath = path.join(TMP_VIDEOS_DIR, params.slug);
+		// Handle temp files (uploaded during rendering)
+		if (params.slug.startsWith('temp-')) {
+			// Extract filename from temp-{tempId}-{filename}
+			// UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+			const uuidPattern =
+				/^temp-([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})-(.+)$/i;
+			const match = params.slug.match(uuidPattern);
+			if (!match) {
+				throw error(400, 'Invalid temp file format');
+			}
+			const filename = match[2]; // Everything after temp-{uuid}-
+			filepath = path.join(TEMP_UPLOAD_DIR, filename);
+		} else {
+			// Try rendered videos first, then regular uploads
+			filepath = path.join(RENDERED_VIDEOS_DIR, params.slug);
+
+			if (!existsSync(filepath)) {
+				filepath = path.join(TMP_VIDEOS_DIR, params.slug);
+			}
 		}
 
 		// Security check - ensure file is in one of our allowed directories
-		if (!filepath.startsWith(TMP_VIDEOS_DIR) && !filepath.startsWith(RENDERED_VIDEOS_DIR)) {
+		const allowedDirs = [TMP_VIDEOS_DIR, RENDERED_VIDEOS_DIR, TEMP_UPLOAD_DIR];
+		const isAllowed = allowedDirs.some((dir) => filepath.startsWith(dir));
+
+		if (!isAllowed) {
 			throw error(400, 'Invalid file path');
 		}
 

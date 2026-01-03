@@ -32,7 +32,7 @@ export const MasterComposition: React.FC<MasterCompositionProps> = ({ segments }
 							top: '50%',
 							left: '50%',
 							transform: 'translate(-50%, -50%)',
-							fontSize: 100,
+							fontSize: 60,
 							color: 'white',
 							textAlign: 'center' as const,
 							zIndex: 5,

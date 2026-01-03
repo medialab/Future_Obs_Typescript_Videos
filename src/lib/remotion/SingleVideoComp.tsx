@@ -93,8 +93,8 @@ export const SingleVideoComp: React.FC<{
 					trimBefore={beginTimeSeconds * fps}
 					trimAfter={endTimeSeconds * fps}
 					style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-					muted={false}
-					volume={fadeAudioVolume(frame, 0, clipDurationFrames)}
+					muted={!data.hasAudio}
+					volume={data.hasAudio ? fadeAudioVolume(frame, 0, clipDurationFrames) : 0}
 				/>
 			</div>
 
@@ -269,7 +269,7 @@ function getPlatformIcon(platform: VideoData['Platform']): string {
 	} else if (platform === 'FACEBOOK') {
 		return staticFile('/FACEBOOK.png');
 	} else if (platform === 'TIKTOK') {
-		return staticFile('/TIKTOKT.png');
+		return staticFile('/TIKTOK.png');
 	} else if (platform === 'LINKEDIN') {
 		return staticFile('/LINKEDIN.png');
 	} else {
